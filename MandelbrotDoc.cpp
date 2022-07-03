@@ -22,7 +22,7 @@ END_MESSAGE_MAP()
 
 CMandelbrotDoc::CMandelbrotDoc()
 {
-	// TODO: add one-time construction code here
+    // TODO: add one-time construction code here
 
 }
 
@@ -34,27 +34,25 @@ CMandelbrotDoc::~CMandelbrotDoc()
 
 BOOL CMandelbrotDoc::OnNewDocument()
 {
-	if (!CDocument::OnNewDocument())
-		return FALSE;
+    if (!CDocument::OnNewDocument())
+        return FALSE;
 
-	// TODO: add reinitialization code here
-	// (SDI documents will reuse this document)
+    // TODO: add reinitialization code here
+    // (SDI documents will reuse this document)
 
-	return TRUE;
+    return TRUE;
 }
 
 
 // CMandelbrotDoc serialization
 void CMandelbrotDoc::Serialize(CArchive& ar)
 {
-	if (ar.IsStoring())
-	{
-		// TODO: add storing code here
-	}
-	else
-	{
-		// TODO: add loading code here
-	}
+    if (ar.IsStoring()) {
+        // TODO: add storing code here
+    }
+    else {
+        // TODO: add loading code here
+    }
 }
 
 
@@ -62,12 +60,12 @@ void CMandelbrotDoc::Serialize(CArchive& ar)
 #ifdef _DEBUG
 void CMandelbrotDoc::AssertValid() const
 {
-	CDocument::AssertValid();
+    CDocument::AssertValid();
 }
 
 void CMandelbrotDoc::Dump(CDumpContext& dc) const
 {
-	CDocument::Dump(dc);
+    CDocument::Dump(dc);
 }
 #endif //_DEBUG
 

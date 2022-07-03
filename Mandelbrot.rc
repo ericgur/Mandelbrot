@@ -188,11 +188,13 @@ BEGIN
     END
     POPUP "Iterations"
     BEGIN
+        MENUITEM "1024",                        438
+        MENUITEM "768",                         437
         MENUITEM "512",                         436
         MENUITEM "384",                         435
-        MENUITEM "256",                         434
+        MENUITEM "256",                         434, CHECKED
         MENUITEM "192",                         433
-        MENUITEM "128",                         432, CHECKED
+        MENUITEM "128",                         432 
         MENUITEM "96",                          431
         MENUITEM "64",                          ID_ITERATIONS
     END
@@ -288,14 +290,14 @@ BEGIN
     BEGIN
         BLOCK "040904B0"
         BEGIN
-            VALUE "CompanyName", "TODO: <Company name>"
+            VALUE "CompanyName", "Eric Gur"
             VALUE "FileDescription", "Mandelbrot"
-            VALUE "FileVersion", "1.0.0.1"
+            VALUE "FileVersion", "1.1.0.0"
             VALUE "InternalName", "Mandelbrot.exe"
-            VALUE "LegalCopyright", "TODO: (c) <Company name>.  All rights reserved."
+            VALUE "LegalCopyright", "(c) Eric Gur.  All rights reserved."
             VALUE "OriginalFilename", "Mandelbrot.exe"
-            VALUE "ProductName", "TODO: <Product name>"
-            VALUE "ProductVersion", "1.0.0.1"
+            VALUE "ProductName", "Mandelbrot MFC App"
+            VALUE "ProductVersion", "1.1.0.0"
         END
     END
     BLOCK "VarFileInfo"

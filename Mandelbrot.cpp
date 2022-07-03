@@ -71,9 +71,13 @@ BOOL CMandelbrotApp::InitInstance()
     if (!ProcessShellCommand(cmdInfo))
         return FALSE;
     // The one and only window has been initialized, so show and update it
+ 
 
     m_pMainWnd->ShowWindow(SW_SHOW);
     m_pMainWnd->UpdateWindow();
+    //CMenu* menu = m_pMainWnd->GetMenu();
+    //menu->CheckMenuItem(ID_VIEW_STATUS_BAR, MF_UNCHECKED);
+
     // call DragAcceptFiles only if there's a suffix
     //  In an SDI app, this should occur after ProcessShellCommand
     return TRUE;
@@ -87,7 +91,7 @@ class CAboutDlg : public CDialog
 public:
     CAboutDlg();
 
-// Dialog Data
+    // Dialog Data
     enum { IDD = IDD_ABOUTBOX };
 
 protected:

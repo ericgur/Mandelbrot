@@ -19,7 +19,9 @@ static const int s_iterCountTable[] =
     192,
     256,
     384,
-    512
+    512,
+    768,
+    1024
 };
 
 // CMandelbrotView
@@ -27,17 +29,17 @@ static const int s_iterCountTable[] =
 IMPLEMENT_DYNCREATE(CMandelbrotView, CView)
 
 BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
-ON_WM_LBUTTONDOWN()
-ON_WM_RBUTTONDOWN()
-ON_WM_MBUTTONDOWN()
-ON_WM_CREATE()
-ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
-ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
+    ON_WM_LBUTTONDOWN()
+    ON_WM_RBUTTONDOWN()
+    ON_WM_MBUTTONDOWN()
+    ON_WM_CREATE()
+    ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
+    ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
 END_MESSAGE_MAP()
 
 // CMandelbrotView construction/destruction
 
-CMandelbrotView::CMandelbrotView() 
+CMandelbrotView::CMandelbrotView()
 {
     m_MaxIter = 128;
     m_ColorTable32 = NULL;
@@ -46,12 +48,12 @@ CMandelbrotView::CMandelbrotView()
 
     //fill bitmap header
     memset(&m_BmpInfo, 0, sizeof(m_BmpInfo));
-    m_BmpInfo.bmiHeader.biSize          = sizeof(BITMAPINFOHEADER);
-    m_BmpInfo.bmiHeader.biPlanes        = 1; 
-    m_BmpInfo.bmiHeader.biBitCount      = 32;
-    m_BmpInfo.bmiHeader.biCompression   = BI_RGB;
-    m_BmpInfo.bmiHeader.biXPelsPerMeter = 100; 
-    m_BmpInfo.bmiHeader.biYPelsPerMeter = 100; 
+    m_BmpInfo.bmiHeader.biSize = sizeof(BITMAPINFOHEADER);
+    m_BmpInfo.bmiHeader.biPlanes = 1;
+    m_BmpInfo.bmiHeader.biBitCount = 32;
+    m_BmpInfo.bmiHeader.biCompression = BI_RGB;
+    m_BmpInfo.bmiHeader.biXPelsPerMeter = 100;
+    m_BmpInfo.bmiHeader.biYPelsPerMeter = 100;
 
     //init color table
     m_GreyScale = false;
@@ -92,79 +94,72 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     const int width = rect.Width(), height = rect.Height();
 
     //deallocate on size change
-    if(m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width)
-    {
+    if (m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width) {
         free(m_BmpBits);
         m_BmpBits = NULL;
     }
 
     //allocate new bitmap if needed
-    if (NULL == m_BmpBits)
-    {
+    if (NULL == m_BmpBits) {
         m_BmpInfo.bmiHeader.biHeight = height;
-        m_BmpInfo.bmiHeader.biWidth  = width;
+        m_BmpInfo.bmiHeader.biWidth = width;
         m_BuffLen = height * width;
         m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
         m_NeedToRedraw = true;
     }
-    
-    const double dx = (xmax-xmin) / width, dy = (ymax-ymin) / height;
 
-    if (xmin + dx == xmin || ymin + dy == ymin)
-    {
+    const double dx = (xmax - xmin) / width, dy = (ymax - ymin) / height;
+
+    if (xmin + dx == xmin || ymin + dy == ymin) {
         AfxMessageBox(L"Maximum precision reached :)\nPlease zoom out", MB_ICONINFORMATION);
         m_zoom *= 4.0;
         m_NeedToRedraw = false;
     }
 
-    if(!m_NeedToRedraw)
+    if (!m_NeedToRedraw)
         return;
 
     LARGE_INTEGER time_start, time_end;
     QueryPerformanceCounter(&time_start);
-    
+
 
     //create x table
     double* xTable = new double[width];
     xTable[0] = xmin;
-    for(int i=1; i<width; ++i)
-    {
-        xTable[i] = xmin + ((double)(i) * dx);
+    for (int i = 1; i < width; ++i) {
+        xTable[i] = xmin + ((double)(i)*dx);
     }
 
 #pragma omp parallel for
 
-    for (int l = 0; l < height; ++l)
-    {
+    for (int l = 0; l < height; ++l) {
         double y = ymin + (dy * l);
 
         //point to start of buffer
         COLORREF* pbuff = m_BmpBits + width * l;
 
-        for (int k = 0; k < width; ++k)
-        {
+        for (int k = 0; k < width; ++k) {
             int color = 0;
             double usq = 0, vsq = 0, u = 0, v = 0;
             double x = xTable[k];
 
             // complex iterative equation is:
             // C(i) = C(i-1)^2 + C(0)
-            do
-            {
+            do {
                 // real
                 double tmp = usq - vsq + x;
 
                 // imaginary
                 //v = 2.0*(u*v)+ y;
-                v = u*v + u*v + y;
+                v = u * v + u * v + y;
                 u = tmp;
-                vsq = v*v;
-                usq = u*u;
+                vsq = v * v;
+                usq = u * u;
                 // check uv vector amplitude is smaller than 2
-            } while (vsq+usq < 4.0 && ++color < m_MaxIter);
+            } while (vsq + usq < 4.0 && ++color < m_MaxIter);
 
             *(pbuff++) = m_ColorTable32[color];
-        }        
+        }
     }
 
     //all done
@@ -177,15 +172,16 @@ void CMandelbrotView::OnDraw(CDC* pDC)
 
     swprintf(message, _countof(message), (m_zoom >= 1.0) ? L"Zoom x%0.0lf (%ims)" : L"Zoom x%0.5f (%ims)", m_zoom, totalTime);
 
-    ((CFrameWnd*)AfxGetMainWnd())->SetWindowText( message );
+    ((CFrameWnd*)AfxGetMainWnd())->SetWindowText(message);
     m_NeedToRedraw = false;
 }
 
 
 void CMandelbrotView::SetDefaultValues(void)
 {
-    xmax = 2.5f;
+    xmax = 2.5;
     xmin = -xmax;
+    ymax = ymin = 0.0;
     m_zoom = 1;
     SetAspectRatio();
 }
@@ -234,7 +230,7 @@ void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 {
     double quarter, center, alpha;
     CRect rect;
-    GetClientRect( &rect );
+    GetClientRect(&rect);
 
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
@@ -263,7 +259,7 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 {
     double quarter, center, alpha;
     CRect rect;
-    GetClientRect( &rect );
+    GetClientRect(&rect);
 
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
@@ -304,21 +300,18 @@ void CMandelbrotView::CreateColorTables(void)
     if (m_ColorTable32)
         delete[] m_ColorTable32;
 
-    m_ColorTable32 = new COLORREF[m_MaxIter+2];
-    if (m_GreyScale)
-    {
-        for (size_t i = 1; i <= m_MaxIter; ++i)
-        {
+    m_ColorTable32 = new COLORREF[m_MaxIter + 2];
+    if (m_GreyScale) {
+        for (size_t i = 1; i <= m_MaxIter; ++i) {
             int c = 255 - (int)(255.0f * (float)i / (float)m_MaxIter);
             m_ColorTable32[i] = RGB(c, c, c);
         }
     }
-    else
-    {
-        for (size_t i = 1; i <= m_MaxIter; ++i)
-        {
+    else {
+        for (size_t i = 1; i <= m_MaxIter; ++i) {
             size_t c = m_MaxIter - i;
-            m_ColorTable32[i] = RGB(c * 12 & 255, c * 16 & 255, c * 5 & 255);
+            //m_ColorTable32[i] = RGB(c * 12 & 255, c * 16 & 255, c * 5 & 255);
+            m_ColorTable32[i] = RGB(c * 6 & 255, c * 8 & 255, c * 3 & 255);
         }
     }
 
@@ -332,20 +325,20 @@ int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
         return -1;
 
     SetDefaultValues();
+    SetAspectRatio();
 
     return 0;
 }
 
 
 void CMandelbrotView::OnIterationChange(UINT nID)
-{ 
+{
     m_MaxIter = s_iterCountTable[nID - ID_ITERATIONS];
 
-    CMenu *menu = AfxGetMainWnd()->GetMenu();
+    CMenu* menu = AfxGetMainWnd()->GetMenu();
 
-    for (int i = ID_ITERATIONS; i <= ID_ITERATIONS + 6; ++i)
-    {
-        if((UINT)i == nID)
+    for (int i = ID_ITERATIONS; i <= ID_ITERATIONS_LAST; ++i) {
+        if ((UINT)i == nID)
             menu->CheckMenuItem(i, MF_CHECKED);
         else
             menu->CheckMenuItem(i, MF_UNCHECKED);
@@ -362,17 +355,15 @@ void CMandelbrotView::OnGreyScale()
 
     int state = menu->GetMenuState(ID_VIEW_GREYSCALE, MF_BYCOMMAND);
 
-    if (state & MF_CHECKED)
-    {
+    if (state & MF_CHECKED) {
         menu->CheckMenuItem(ID_VIEW_GREYSCALE, MF_UNCHECKED | MF_BYCOMMAND);
         m_GreyScale = false;
     }
-    else
-    {
+    else {
         menu->CheckMenuItem(ID_VIEW_GREYSCALE, MF_CHECKED | MF_BYCOMMAND);
         m_GreyScale = true;
     }
-    
+
     CreateColorTables();
     m_NeedToRedraw = true;
     Invalidate(FALSE);
