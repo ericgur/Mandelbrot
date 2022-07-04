@@ -11,6 +11,8 @@
 #define new DEBUG_NEW
 #endif
 
+#define MAX_ZOOM (1ull<<44)
+
 static const int s_iterCountTable[] =
 {
     64,
@@ -115,13 +117,13 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
             double x = xTable[k];
 
             // complex iterative equation is:
-            // C(i) = C(i-1)^2 + C(0)
+            // C(i) = C(i-1) ^ 2 + C(0)
             do {
                 // real
                 double tmp = usq - vsq + x;
 
                 // imaginary
-                //v = 2.0*(u*v)+ y;
+                //v = 2.0 * (u * v) + y;
                 v = u * v + u * v + y;
                 u = tmp;
                 vsq = v * v;
@@ -163,31 +165,29 @@ void CMandelbrotView::OnDraw(CDC* pDC)
 
     const double dx = (m_xmax - m_xmin) / width, dy = dx;
 
-    if (m_xmin + dx == m_xmin || m_ymin + dy == m_ymin) {
-        AfxMessageBox(L"Maximum precision reached :)\nPlease zoom out", MB_ICONINFORMATION);
-        m_zoom *= 4.0;
+    if (m_NeedToRedraw) {
+        LARGE_INTEGER time_start, time_end;
+        QueryPerformanceCounter(&time_start);
+
+        DrawImage(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy);
+
+        //all done
+        QueryPerformanceCounter(&time_end);
+
+        DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
+        if (m_zoom < 1.0)
+            swprintf(message, _countof(message), L"Zoom x%0.5f (%ims)", m_zoom, totalTime);
+        else if (m_zoom > (1 << 16))
+            swprintf(message, _countof(message), L"Zoom x2^%0.0lf (%ims)" , log2(m_zoom), totalTime);
+        else
+            swprintf(message, _countof(message), L"Zoom x%0.0lf (%ims)", m_zoom, totalTime);
+
+        ((CFrameWnd*)AfxGetMainWnd())->SetWindowText(message);
         m_NeedToRedraw = false;
     }
 
-    if (!m_NeedToRedraw)
-        return;
-
-    LARGE_INTEGER time_start, time_end;
-    QueryPerformanceCounter(&time_start);
-
-    DrawImage(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy);
-
-    //all done
-    QueryPerformanceCounter(&time_end);
-
-    DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
-
+    ASSERT(m_BmpBits != NULL);
     SetDIBitsToDevice((HDC)(*pDC), 0, 0, width, height, 0, 0, 0, height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
-
-    swprintf(message, _countof(message), (m_zoom >= 1.0) ? L"Zoom x%0.0lf (%ims)" : L"Zoom x%0.5f (%ims)", m_zoom, totalTime);
-
-    ((CFrameWnd*)AfxGetMainWnd())->SetWindowText(message);
-    m_NeedToRedraw = false;
 }
 
 
@@ -242,59 +242,72 @@ CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inl
 //zoom in x2
 void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 {
+    double zoomMultiplier = 2.0;
+    if (nFlags & MK_CONTROL)
+        zoomMultiplier = 4.0;
+
+    if (m_zoom * zoomMultiplier > MAX_ZOOM) {
+        AfxMessageBox(L"Maximum precision reached :)\nPlease zoom out", MB_ICONINFORMATION);
+        return;
+    }
+
+    m_zoom *= zoomMultiplier;
     double quarter, center, alpha;
     CRect rect;
     GetClientRect(&rect);
 
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
-    quarter = (m_ymax - m_ymin) / 4.0;
+    quarter = (m_ymax - m_ymin) / (zoomMultiplier * 2);
     center = alpha * m_ymax + (1.0 - alpha) * m_ymin;
     m_ymin = center - quarter;
     m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) / 4.0;
+    quarter = (m_xmax - m_xmin) / (zoomMultiplier * 2);
     center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
     m_xmin = center - quarter;
     m_xmax = center + quarter;
 
-    m_zoom *= 2.0;
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 
-    CView::OnLButtonDown(nFlags, point);
+    // CView::OnLButtonDown(nFlags, point);
 }
 
 
 //zoom out x2
 void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 {
+    double zoomMultiplier = 2.0;
+    if (nFlags & MK_CONTROL)
+        zoomMultiplier = 4.0;
+
     double quarter, center, alpha;
     CRect rect;
     GetClientRect(&rect);
 
+    m_zoom /= zoomMultiplier;
+
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
-    quarter = (m_ymax - m_ymin);
+    quarter = (m_ymax - m_ymin) * zoomMultiplier / 2.0;
     center = alpha * m_ymax + (1.0 - alpha) * m_ymin;
     m_ymin = center - quarter;
     m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin);
+    quarter = (m_xmax - m_xmin) * zoomMultiplier / 2.0;
     center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
     m_xmin = center - quarter;
     m_xmax = center + quarter;
 
-    m_zoom /= 2.0;
-
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 
-    CView::OnRButtonDown(nFlags, point);
+    //CView::OnRButtonDown(nFlags, point);
 }
 
 
