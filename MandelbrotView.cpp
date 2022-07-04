@@ -45,6 +45,8 @@ END_MESSAGE_MAP()
 CMandelbrotView::CMandelbrotView()
 {
     m_MaxIter = 128;
+    m_SmoothLevel = true;
+
     m_ColorTable32 = NULL;
     m_BmpBits = NULL;
     m_BuffLen = 0;
@@ -85,6 +87,14 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
     return CView::PreCreateWindow(cs);
 }
 
+inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
+{
+    COLORREF rb1 = ((0x100 - alpha) * (colora & 0xFF00FF)) >> 8;
+    COLORREF rb2 = (alpha * (colorb & 0xFF00FF)) >> 8;
+    COLORREF g1 = ((0x100 - alpha) * (colora & 0x00FF00)) >> 8;
+    COLORREF g2 = (alpha * (colorb & 0x00FF00)) >> 8;
+    return ((rb1 + rb2) & 0xFF00FF) + ((g1 + g2) & 0x00FF00);
+}
 
 void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy)
 /* Draw the Mandelbrot image on a DIB surface
@@ -110,9 +120,10 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
 
         //point to start of buffer
         COLORREF* pbuff = pBits + width * l;
+        double LOG2 = log(2.0);
 
         for (int k = 0; k < width; ++k) {
-            int color = 0;
+            int iter = 0;
             double usq = 0, vsq = 0, u = 0, v = 0;
             double x = xTable[k];
 
@@ -129,9 +140,20 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
                 vsq = v * v;
                 usq = u * u;
                 // check uv vector amplitude is smaller than 2
-            } while (vsq + usq < 4.0 && ++color < m_MaxIter);
+            } while (vsq + usq < 4.0 && ++iter < m_MaxIter);
 
-            *(pbuff++) = m_ColorTable32[color];
+            if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
+                double mu = (double)iter - (log(log(sqrt(vsq + usq)))) / LOG2;
+                DWORD index = (DWORD)floor(mu);
+                COLORREF c1 = m_ColorTable32[index];
+                COLORREF c2 = m_ColorTable32[index+1];
+                DWORD alpha = (DWORD)(255.0 * (mu - index));
+                COLORREF color = blendAlpha(c1, c2, alpha);
+                *(pbuff++) = color;
+            }
+            else {
+                *(pbuff++) = m_ColorTable32[iter];
+            }
         }
     }
 

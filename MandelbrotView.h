@@ -43,6 +43,7 @@ protected:
     double m_Frequency;
     bool m_NeedToRedraw;
     bool m_GreyScale;
+    bool m_SmoothLevel;
 
     // Set default values for zoom and coords
     void SetDefaultValues(void);
