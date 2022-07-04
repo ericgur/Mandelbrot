@@ -184,6 +184,7 @@ IDR_MAINFRAME MENU
 BEGIN
     POPUP "&File"
     BEGIN
+        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE
         MENUITEM "E&xit",                       ID_APP_EXIT
     END
     POPUP "Iterations"
@@ -194,7 +195,7 @@ BEGIN
         MENUITEM "384",                         435
         MENUITEM "256",                         434, CHECKED
         MENUITEM "192",                         433
-        MENUITEM "128",                         432 
+        MENUITEM "128",                         432
         MENUITEM "96",                          431
         MENUITEM "64",                          ID_ITERATIONS
     END
@@ -203,7 +204,7 @@ BEGIN
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
         MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE
     END
-    POPUP "&Help"
+    POPUP "&Help", HELP
     BEGIN
         MENUITEM "&About Mandelbrot...",        ID_APP_ABOUT
     END
@@ -493,6 +494,7 @@ END
 STRINGTABLE
 BEGIN
     ID_VIEW_GREYSCALE       "Use grey scale instead of colors"
+    ID_FILE_SAVE_IMAGE      "Save shown image to disk"
 END
 
 #endif    // English (United States) resources

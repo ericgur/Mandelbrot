@@ -33,7 +33,7 @@ public:
 #endif
 
 protected:
-    double xmin, xmax, ymin, ymax;
+    double m_xmin, m_xmax, m_ymin, m_ymax;
     double m_zoom;
     size_t m_MaxIter;
     BITMAPINFO m_BmpInfo;
@@ -48,7 +48,7 @@ protected:
     void SetDefaultValues(void);
     void SetAspectRatio(void);
     void CreateColorTables(void);
-
+    void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy);
 // Generated message map functions
 protected:
     DECLARE_MESSAGE_MAP()
@@ -58,6 +58,7 @@ protected:
     afx_msg int  OnCreate(LPCREATESTRUCT lpCreateStruct);
     afx_msg void OnIterationChange(UINT nID);
     afx_msg void OnGreyScale();
+    afx_msg void OnFileSaveImage();
 };
 
 #ifndef _DEBUG  // debug version in MandelbrotView.cpp

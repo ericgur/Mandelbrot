@@ -35,6 +35,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_WM_CREATE()
     ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
+    ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
 END_MESSAGE_MAP()
 
 // CMandelbrotView construction/destruction
@@ -83,60 +84,30 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 }
 
 
-void CMandelbrotView::OnDraw(CDC* pDC)
+void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy)
+/* Draw the Mandelbrot image on a DIB surface
+* pBits: output DIB surface
+* width: width in pixels
+* height: height in pixels
+* x0: left most coord
+* dx: delta coord between pixels
+* y0: top or bottom most coord. Depending if the image is top down or bottom up
+* dy: delta coord between pixels, negative for top down DIBs
+*/
 {
-    SetAspectRatio();
-
-    wchar_t message[256];
-
-    CRect rect;
-    GetClientRect(rect);
-    const int width = rect.Width(), height = rect.Height();
-
-    //deallocate on size change
-    if (m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width) {
-        free(m_BmpBits);
-        m_BmpBits = NULL;
-    }
-
-    //allocate new bitmap if needed
-    if (NULL == m_BmpBits) {
-        m_BmpInfo.bmiHeader.biHeight = height;
-        m_BmpInfo.bmiHeader.biWidth = width;
-        m_BuffLen = height * width;
-        m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
-        m_NeedToRedraw = true;
-    }
-
-    const double dx = (xmax - xmin) / width, dy = (ymax - ymin) / height;
-
-    if (xmin + dx == xmin || ymin + dy == ymin) {
-        AfxMessageBox(L"Maximum precision reached :)\nPlease zoom out", MB_ICONINFORMATION);
-        m_zoom *= 4.0;
-        m_NeedToRedraw = false;
-    }
-
-    if (!m_NeedToRedraw)
-        return;
-
-    LARGE_INTEGER time_start, time_end;
-    QueryPerformanceCounter(&time_start);
-
-
     //create x table
     double* xTable = new double[width];
-    xTable[0] = xmin;
-    for (int i = 1; i < width; ++i) {
-        xTable[i] = xmin + ((double)(i)*dx);
+    for (int i = 0; i < width; ++i) {
+        xTable[i] = x0 + (double)(i) * dx;
     }
 
 #pragma omp parallel for
 
     for (int l = 0; l < height; ++l) {
-        double y = ymin + (dy * l);
+        double y = y0 + (dy * l);
 
         //point to start of buffer
-        COLORREF* pbuff = m_BmpBits + width * l;
+        COLORREF* pbuff = pBits + width * l;
 
         for (int k = 0; k < width; ++k) {
             int color = 0;
@@ -162,11 +133,54 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         }
     }
 
+    delete[] xTable;
+}
+
+void CMandelbrotView::OnDraw(CDC* pDC)
+{
+    SetAspectRatio();
+
+    wchar_t message[256];
+
+    CRect rect;
+    GetClientRect(rect);
+    const int width = rect.Width(), height = rect.Height();
+
+    //deallocate on size change
+    if (m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width) {
+        free(m_BmpBits);
+        m_BmpBits = NULL;
+    }
+
+    //allocate new bitmap if needed
+    if (NULL == m_BmpBits) {
+        m_BmpInfo.bmiHeader.biHeight = height;
+        m_BmpInfo.bmiHeader.biWidth = width;
+        m_BuffLen = height * width;
+        m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
+        m_NeedToRedraw = true;
+    }
+
+    const double dx = (m_xmax - m_xmin) / width, dy = dx;
+
+    if (m_xmin + dx == m_xmin || m_ymin + dy == m_ymin) {
+        AfxMessageBox(L"Maximum precision reached :)\nPlease zoom out", MB_ICONINFORMATION);
+        m_zoom *= 4.0;
+        m_NeedToRedraw = false;
+    }
+
+    if (!m_NeedToRedraw)
+        return;
+
+    LARGE_INTEGER time_start, time_end;
+    QueryPerformanceCounter(&time_start);
+
+    DrawImage(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy);
+
     //all done
     QueryPerformanceCounter(&time_end);
 
     DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
-    delete[] xTable;
 
     SetDIBitsToDevice((HDC)(*pDC), 0, 0, width, height, 0, 0, 0, height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
 
@@ -179,9 +193,9 @@ void CMandelbrotView::OnDraw(CDC* pDC)
 
 void CMandelbrotView::SetDefaultValues(void)
 {
-    xmax = 2.5;
-    xmin = -xmax;
-    ymax = ymin = 0.0;
+    m_xmax = 2.5;
+    m_xmin = -m_xmax;
+    m_ymax = m_ymin = 0.0;
     m_zoom = 1;
     SetAspectRatio();
 }
@@ -191,14 +205,14 @@ void CMandelbrotView::SetAspectRatio(void)
 {
     CRect rect;
     GetClientRect(rect);
-    //use xmin, xmax and m_rect to determine ymin and ymax
+    //use m_xmin, m_xmax and m_rect to determine m_ymin and m_ymax
     //check if window created
     if (0 == rect.Height())
         return;
     double ratio = (double)(rect.Height()) / (double)(rect.Width());
-    double ysize = (xmax - xmin) * (ratio / 2.0);
-    ymin = ((ymax + ymin) / 2.0) - ysize;
-    ymax = ymin + (2.0 * ysize);
+    double ysize = (m_xmax - m_xmin) * (ratio / 2.0);
+    m_ymin = ((m_ymax + m_ymin) / 2.0) - ysize;
+    m_ymax = m_ymin + (2.0 * ysize);
 }
 
 
@@ -234,17 +248,17 @@ void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
-    quarter = (ymax - ymin) / 4.0;
-    center = alpha * ymax + (1.0 - alpha) * ymin;
-    ymin = center - quarter;
-    ymax = center + quarter;
+    quarter = (m_ymax - m_ymin) / 4.0;
+    center = alpha * m_ymax + (1.0 - alpha) * m_ymin;
+    m_ymin = center - quarter;
+    m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (xmax - xmin) / 4.0;
-    center = alpha * xmax + (1.0 - alpha) * xmin;
-    xmin = center - quarter;
-    xmax = center + quarter;
+    quarter = (m_xmax - m_xmin) / 4.0;
+    center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
+    m_xmin = center - quarter;
+    m_xmax = center + quarter;
 
     m_zoom *= 2.0;
     m_NeedToRedraw = true;
@@ -263,17 +277,17 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 
     alpha = 1.0 - ((double)(point.y) / (double)rect.bottom);
     //fix y coords
-    quarter = (ymax - ymin);
-    center = alpha * ymax + (1.0 - alpha) * ymin;
-    ymin = center - quarter;
-    ymax = center + quarter;
+    quarter = (m_ymax - m_ymin);
+    center = alpha * m_ymax + (1.0 - alpha) * m_ymin;
+    m_ymin = center - quarter;
+    m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (xmax - xmin);
-    center = alpha * xmax + (1.0 - alpha) * xmin;
-    xmin = center - quarter;
-    xmax = center + quarter;
+    quarter = (m_xmax - m_xmin);
+    center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
+    m_xmin = center - quarter;
+    m_xmax = center + quarter;
 
     m_zoom /= 2.0;
 
@@ -367,4 +381,39 @@ void CMandelbrotView::OnGreyScale()
     CreateColorTables();
     m_NeedToRedraw = true;
     Invalidate(FALSE);
+}
+
+
+void CMandelbrotView::OnFileSaveImage()
+{
+    int width = 2560, height = 1440; // TODO: add more resolutions.
+
+    CImage image;
+    image.Create(width, -height, 32);
+    CFileDialog dlg(FALSE,                         //bOpenFileDialog,
+                    _T("png"),                     //LPCTSTR lpszDefExt = NULL,
+                    _T("untitled"),                      //LPCTSTR lpszFileName = NULL,
+                    OFN_HIDEREADONLY | OFN_ENABLESIZING
+                    | OFN_OVERWRITEPROMPT,         //DWORD dwFlags = OFN_HIDEREADONLY | OFN_OVERWRITEPROMPT,
+                    _T("PNG files (*.png)|*.png||"),   //LPCTSTR lpszFilter = NULL,
+                    this);                         //CWnd* pParentWnd = NULL,
+
+    if (IDCANCEL == dlg.DoModal())
+        return; //user pressed cancel
+
+    CString filename = dlg.GetPathName();
+    if (filename.IsEmpty())
+        return;
+
+
+    COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
+
+    const double dx = (m_xmax - m_xmin) / width;
+
+    DrawImage(pBits, width, height, m_xmin, dx, m_ymax, -dx);
+
+    HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);
+    if (!SUCCEEDED(hr)) { 
+        AfxMessageBox(L"Failed to save image", MB_ICONINFORMATION);
+    }
 }
