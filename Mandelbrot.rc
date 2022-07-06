@@ -195,7 +195,7 @@ BEGIN
         MENUITEM "384",                         435,MFT_STRING,MFS_ENABLED
         MENUITEM "256",                         434,MFT_STRING,MFS_ENABLED
         MENUITEM "192",                         433,MFT_STRING,MFS_ENABLED
-        MENUITEM "128",                         432,MFT_STRING,MFS_CHECKED
+        MENUITEM "128",                         432,MFT_STRING,MFS_ENABLED
         MENUITEM "96",                          431,MFT_STRING,MFS_ENABLED
         MENUITEM "64",                          ID_ITERATIONS,MFT_STRING,MFS_ENABLED
     END

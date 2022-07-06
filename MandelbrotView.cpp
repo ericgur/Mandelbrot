@@ -16,12 +16,19 @@
 
 inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
 {
-    COLORREF rb1 = ((0x100 - alpha) * (colora & 0xFF00FF)) >> 8;
-    COLORREF rb2 = (alpha * (colorb & 0xFF00FF)) >> 8;
-    COLORREF g1 = ((0x100 - alpha) * (colora & 0x00FF00)) >> 8;
-    COLORREF g2 = (alpha * (colorb & 0x00FF00)) >> 8;
-    return ((rb1 + rb2) & 0xFF00FF) + ((g1 + g2) & 0x00FF00);
+    COLORREF rb1 = (0x100 - alpha) * (colora & 0xFF00FF);
+    COLORREF rb2 = alpha * (colorb & 0xFF00FF);
+    COLORREF g1 = (0x100 - alpha) * (colora & 0x00FF00);
+    COLORREF g2 = alpha * (colorb & 0x00FF00);
+    return (((rb1 + rb2) >> 8) & 0xFF00FF) + (((g1 + g2) >> 8) & 0x00FF00);
+
+    //COLORREF rb1 = ((0x100 - alpha) * (colora & 0xFF00FF)) >> 8;
+    //COLORREF rb2 = (alpha * (colorb & 0xFF00FF)) >> 8;
+    //COLORREF g1 = ((0x100 - alpha) * (colora & 0x00FF00)) >> 8;
+    //COLORREF g2 = (alpha * (colorb & 0x00FF00)) >> 8;
+    //return ((rb1 + rb2) & 0xFF00FF) + ((g1 + g2) & 0x00FF00);
 }
+
 
 #ifdef DEBUG
 void DebugPrint(const TCHAR* fmt, ...)
@@ -469,11 +476,12 @@ void CMandelbrotView::OnIterationChange(UINT nID)
 
     CMenu* menu = AfxGetMainWnd()->GetMenu();
     CString value;
+    menu->CheckMenuRadioItem(ID_ITERATIONS, ID_ITERATIONS_LAST, nID, MF_BYCOMMAND);
     menu->GetMenuString(nID, value, MF_BYCOMMAND);
     m_MaxIter = _ttoi(value);
-    for (UINT i = ID_ITERATIONS; i <= ID_ITERATIONS_LAST; ++i) {
-        menu->CheckMenuItem(i, (i == nID) ? MF_CHECKED : MF_UNCHECKED);
-    }
+    //for (UINT i = ID_ITERATIONS; i <= ID_ITERATIONS_LAST; ++i) {
+    //    menu->CheckMenuItem(i, (i == nID) ? MF_CHECKED : MF_UNCHECKED);
+    //}
     CreateColorTables();
     m_NeedToRedraw = true;
     Invalidate(FALSE);

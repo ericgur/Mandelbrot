@@ -68,6 +68,9 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
     //EnableDocking(CBRS_ALIGN_ANY);
     //DockControlBar(&m_wndToolBar);
 
+    CMenu* menu = GetMenu();
+    menu->CheckMenuRadioItem(ID_ITERATIONS, ID_ITERATIONS_LAST, ID_ITERATIONS + 2, MF_BYCOMMAND);
+
     return 0;
 }
 
