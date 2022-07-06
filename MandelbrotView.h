@@ -1,9 +1,7 @@
 // MandelbrotView.h : interface of the CMandelbrotView class
 //
 
-
 #pragma once
-
 
 class CMandelbrotView : public CView
 {
@@ -24,6 +22,7 @@ public:
     virtual BOOL PreCreateWindow(CREATESTRUCT& cs);
 protected:
 
+
 // Implementation
 public:
     virtual ~CMandelbrotView();
@@ -33,11 +32,11 @@ public:
 #endif
 
 protected:
-    double m_xmin, m_xmax, m_ymin, m_ymax;
+    mpf_class m_xmin, m_xmax, m_ymin, m_ymax;
     double m_zoom;
-    size_t m_MaxIter;
+    int    m_MaxIter;
     BITMAPINFO m_BmpInfo;
-    int m_BuffLen;
+    size_t  m_BuffLen;
     COLORREF* m_ColorTable32;
     COLORREF* m_BmpBits;
     double m_Frequency;
@@ -50,7 +49,8 @@ protected:
     void SetAspectRatio(void);
     void CreateColorTables(void);
     void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy);
-// Generated message map functions
+    void DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0, const mpf_class& dy);
+    // Generated message map functions
 protected:
     DECLARE_MESSAGE_MAP()
     afx_msg void OnLButtonDown(UINT nFlags, CPoint point);
@@ -66,4 +66,3 @@ protected:
 inline CMandelbrotDoc* CMandelbrotView::GetDocument() const
    { return reinterpret_cast<CMandelbrotDoc*>(m_pDocument); }
 #endif
-

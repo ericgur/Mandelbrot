@@ -76,10 +76,6 @@ IDR_MAINFRAME           ICON                    "res\\Mandelbrot.ico"
 
 IDR_MandelbrotTYPE      ICON                    "res\\MandelbrotDoc.ico"
 
-IDI_FILE_VIEW           ICON                    "res\\file_view.ico"
-
-IDI_FILE_VIEW_HC        ICON                    "res\\file_view_hc.ico"
-
 
 /////////////////////////////////////////////////////////////////////////////
 //
@@ -180,44 +176,37 @@ END
 // Menu
 //
 
-IDR_MAINFRAME MENU
+IDR_MAINFRAME MENUEX
 BEGIN
-    POPUP "&File"
+    POPUP "&File",                          65535,MFT_STRING,MFS_ENABLED
     BEGIN
-        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE
-        MENUITEM "E&xit",                       ID_APP_EXIT
+        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE,MFT_STRING,MFS_ENABLED
+        MENUITEM "E&xit",                       ID_APP_EXIT,MFT_STRING,MFS_ENABLED
     END
-    POPUP "Iterations"
+    POPUP "Iterations",                     65535,MFT_STRING,MFS_ENABLED
     BEGIN
-        MENUITEM "1024",                        438
-        MENUITEM "768",                         437
-        MENUITEM "512",                         436
-        MENUITEM "384",                         435
-        MENUITEM "256",                         434, CHECKED
-        MENUITEM "192",                         433
-        MENUITEM "128",                         432
-        MENUITEM "96",                          431
-        MENUITEM "64",                          ID_ITERATIONS
+        MENUITEM "2048",                        442,MFT_STRING,MFS_ENABLED
+        MENUITEM "1792",                        441,MFT_STRING,MFS_ENABLED
+        MENUITEM "1536",                        440,MFT_STRING,MFS_ENABLED
+        MENUITEM "1280",                        439,MFT_STRING,MFS_ENABLED
+        MENUITEM "1024",                        438,MFT_STRING,MFS_ENABLED
+        MENUITEM "768",                         437,MFT_STRING,MFS_ENABLED
+        MENUITEM "512",                         436,MFT_STRING,MFS_ENABLED
+        MENUITEM "384",                         435,MFT_STRING,MFS_ENABLED
+        MENUITEM "256",                         434,MFT_STRING,MFS_ENABLED
+        MENUITEM "192",                         433,MFT_STRING,MFS_ENABLED
+        MENUITEM "128",                         432,MFT_STRING,MFS_CHECKED
+        MENUITEM "96",                          431,MFT_STRING,MFS_ENABLED
+        MENUITEM "64",                          ID_ITERATIONS,MFT_STRING,MFS_ENABLED
     END
-    POPUP "&View"
+    POPUP "&View",                          65535,MFT_STRING,MFS_ENABLED
     BEGIN
-        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
-        MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR,MFT_STRING,MFS_ENABLED
+        MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
     END
-    POPUP "&Help", HELP
+    POPUP "&Help",                          65535,MFT_STRING | MFT_RIGHTJUSTIFY,MFS_ENABLED
     BEGIN
-        MENUITEM "&About Mandelbrot...",        ID_APP_ABOUT
-    END
-END
-
-IDR_OUTPUT_POPUP MENU
-BEGIN
-    POPUP "Popup"
-    BEGIN
-        MENUITEM "&Copy",                       ID_EDIT_COPY
-        MENUITEM "&Clear",                      ID_EDIT_CLEAR
-        MENUITEM SEPARATOR
-        MENUITEM "&Hide",                       ID_VIEW_OUTPUTWND
+        MENUITEM "&About Mandelbrot...",        ID_APP_ABOUT,MFT_STRING,MFS_ENABLED
     END
 END
 

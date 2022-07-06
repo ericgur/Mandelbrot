@@ -29,7 +29,6 @@
 #define ID_SORTING_SORTALPHABETIC       146
 #define ID_SORTING_SORTBYTYPE           147
 #define ID_SORTING_SORTBYACCESS         148
-#define ID_VIEW_OUTPUTWND               149
 #define ID_VIEW_PROPERTIESWND           150
 #define ID_SORTPROPERTIES               151
 #define ID_PROPERTIES1                  152
@@ -39,8 +38,6 @@
 #define IDS_CLASS_VIEW                  156
 #define IDS_OUTPUT_WND                  157
 #define IDS_PROPERTIES_WND              158
-#define IDI_FILE_VIEW                   161
-#define IDI_FILE_VIEW_HC                162
 #define IDR_EXPLORER                    169
 #define IDB_EXPLORER_24                 170
 #define IDR_SORT                        171
@@ -50,7 +47,6 @@
 #define IDR_MENU_IMAGES                 179
 #define IDB_MENU_IMAGES_24              180
 #define ID_TOOLS_MACRO                  181
-#define IDR_OUTPUT_POPUP                182
 #define IDR_PROPERTIES                  183
 #define ID_SET_STYLE                    201
 #define ID_VIEW_APPLOOK_WIN_2000        205
@@ -69,7 +65,7 @@
 #define IDS_EXPLORER                    305
 #define IDS_EDIT_MENU                   306
 #define ID_ITERATIONS                   430
-#define ID_ITERATIONS_LAST              440
+#define ID_ITERATIONS_LAST              450
 #define ID_VIEW_GREYSCALE               32771
 #define ID_Menu                         32772
 #define ID_FILE_SAVE_IMAGE              32773
@@ -79,7 +75,7 @@
 #ifdef APSTUDIO_INVOKED
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        310
-#define _APS_NEXT_COMMAND_VALUE         32774
+#define _APS_NEXT_COMMAND_VALUE         32778
 #define _APS_NEXT_CONTROL_VALUE         1000
 #define _APS_NEXT_SYMED_VALUE           310
 #endif

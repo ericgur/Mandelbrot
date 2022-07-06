@@ -8,6 +8,11 @@
 #define PCH_H
 
 // add headers that you want to pre-compile here
+#pragma warning( push )
+#pragma warning( disable: 4127 )
+#include <mpirxx.h>
+#pragma warning( pop )
+
 #include "framework.h"
 
 #endif //PCH_H

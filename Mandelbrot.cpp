@@ -49,7 +49,7 @@ BOOL CMandelbrotApp::InitInstance()
     // Change the registry key under which our settings are stored
     // TODO: You should modify this string to be something appropriate
     // such as the name of your company or organization
-    //SetRegistryKey(_T("Local AppWizard-Generated Applications"));
+    //SetRegistryKey(L"Local AppWizard-Generated Applications");
     //LoadStdProfileSettings(4);  // Load standard INI file options (including MRU)
     // Register the application's document templates.  Document templates
     //  serve as the connection between documents, frame windows and views
