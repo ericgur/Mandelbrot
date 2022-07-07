@@ -5,13 +5,14 @@
 #include "Mandelbrot.h"
 #include "MandelbrotDoc.h"
 #include "MandelbrotView.h"
+#include "ComplexSelectDlg.h"
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
-//#define MAX_ZOOM (1ull<<44)
-#define MAX_ZOOM (1ull<<6)
+#define MAX_ZOOM (1ull<<44)
+//#define MAX_ZOOM (1ull<<4)   // for debug purposes
 
 
 inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
@@ -694,4 +695,16 @@ void CMandelbrotView::OnFileSaveImage()
 void CMandelbrotView::OnSetTypeChooseJuliaConstant()
 {
     // TODO: Add your command handler code here
+    ComplexSelectDlg dlg(this);
+    dlg.m_Real.Format(L"%lf", m_JuliaCr);
+    dlg.m_Imag.Format(L"%lf", m_JuliaCi);
+
+    
+    if (IDCANCEL == dlg.DoModal())
+        return; //user pressed cancel
+    
+    m_JuliaCr = _ttof(dlg.m_Real);
+    m_JuliaCi = _ttof(dlg.m_Imag);
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
 }
