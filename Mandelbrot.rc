@@ -176,37 +176,44 @@ END
 // Menu
 //
 
-IDR_MAINFRAME MENUEX
+IDR_MAINFRAME MENU
 BEGIN
-    POPUP "&File",                          65535,MFT_STRING,MFS_ENABLED
+    POPUP "&File"
     BEGIN
-        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE,MFT_STRING,MFS_ENABLED
-        MENUITEM "E&xit",                       ID_APP_EXIT,MFT_STRING,MFS_ENABLED
+        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE
+        MENUITEM "E&xit",                       ID_APP_EXIT
     END
-    POPUP "Iterations",                     65535,MFT_STRING,MFS_ENABLED
+    POPUP "Iterations"
     BEGIN
-        MENUITEM "2048",                        442,MFT_STRING,MFS_ENABLED
-        MENUITEM "1792",                        441,MFT_STRING,MFS_ENABLED
-        MENUITEM "1536",                        440,MFT_STRING,MFS_ENABLED
-        MENUITEM "1280",                        439,MFT_STRING,MFS_ENABLED
-        MENUITEM "1024",                        438,MFT_STRING,MFS_ENABLED
-        MENUITEM "768",                         437,MFT_STRING,MFS_ENABLED
-        MENUITEM "512",                         436,MFT_STRING,MFS_ENABLED
-        MENUITEM "384",                         435,MFT_STRING,MFS_ENABLED
-        MENUITEM "256",                         434,MFT_STRING,MFS_ENABLED
-        MENUITEM "192",                         433,MFT_STRING,MFS_ENABLED
-        MENUITEM "128",                         432,MFT_STRING,MFS_ENABLED
-        MENUITEM "96",                          431,MFT_STRING,MFS_ENABLED
-        MENUITEM "64",                          ID_ITERATIONS,MFT_STRING,MFS_ENABLED
+        MENUITEM "2048",                        442
+        MENUITEM "1792",                        441
+        MENUITEM "1536",                        440
+        MENUITEM "1280",                        439
+        MENUITEM "1024",                        438
+        MENUITEM "768",                         437
+        MENUITEM "512",                         436
+        MENUITEM "384",                         435
+        MENUITEM "256",                         434
+        MENUITEM "192",                         433
+        MENUITEM "128",                         432
+        MENUITEM "96",                          431
+        MENUITEM "64",                          ID_ITERATIONS
     END
-    POPUP "&View",                          65535,MFT_STRING,MFS_ENABLED
+    POPUP "&View"
     BEGIN
-        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR,MFT_STRING,MFS_ENABLED
-        MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
+        MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR
+        MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE
     END
-    POPUP "&Help",                          65535,MFT_STRING | MFT_RIGHTJUSTIFY,MFS_ENABLED
+    POPUP "Set Type"
     BEGIN
-        MENUITEM "&About Mandelbrot...",        ID_APP_ABOUT,MFT_STRING,MFS_ENABLED
+        MENUITEM "Mandelbrot",                  ID_SETTYPE_MANDELBROT
+        MENUITEM "Julia",                       ID_SETTYPE_JULIA
+        MENUITEM SEPARATOR
+        MENUITEM "Choose Julia Constant",       ID_SETTYPE_CHOOSEJULIACONSTANT
+    END
+    POPUP "&Help", HELP
+    BEGIN
+        MENUITEM "&About Mandelbrot...",        ID_APP_ABOUT
     END
 END
 

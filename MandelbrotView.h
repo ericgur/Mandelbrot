@@ -2,6 +2,13 @@
 //
 
 #pragma once
+enum set_type_t
+{
+    stMandelbrot,
+    stJulia,
+    stCount
+};
+
 
 class CMandelbrotView : public CView
 {
@@ -43,13 +50,17 @@ protected:
     bool m_NeedToRedraw;
     bool m_GreyScale;
     bool m_SmoothLevel;
+    set_type_t m_SetType;
+    double m_JuliaCr, m_JuliaCi; // real and imaginary parts of the Julia constant
 
     // Set default values for zoom and coords
     void SetDefaultValues(void);
     void SetAspectRatio(void);
     void CreateColorTables(void);
-    void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy);
-    void DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0, const mpf_class& dy);
+    void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
+    void DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0,
+                       const mpf_class& dy, const mpf_class& cr, const mpf_class& ci);
+
     // Generated message map functions
 protected:
     DECLARE_MESSAGE_MAP()
@@ -57,9 +68,11 @@ protected:
     afx_msg void OnRButtonDown(UINT nFlags, CPoint point);
     afx_msg void OnMButtonDown(UINT nFlags, CPoint point);
     afx_msg int  OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg void OnSetTypeSelect(UINT nID);
     afx_msg void OnIterationChange(UINT nID);
     afx_msg void OnGreyScale();
     afx_msg void OnFileSaveImage();
+    afx_msg void OnSetTypeChooseJuliaConstant();
 };
 
 #ifndef _DEBUG  // debug version in MandelbrotView.cpp

@@ -70,7 +70,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
 
     CMenu* menu = GetMenu();
     menu->CheckMenuRadioItem(ID_ITERATIONS, ID_ITERATIONS_LAST, ID_ITERATIONS + 2, MF_BYCOMMAND);
-
+    menu->CheckMenuRadioItem(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, ID_SETTYPE_MANDELBROT, MF_BYCOMMAND);
     return 0;
 }
 

@@ -10,8 +10,8 @@
 #define new DEBUG_NEW
 #endif
 
-#define MAX_ZOOM (1ull<<44)
-//#define MAX_ZOOM (1ull<<6)
+//#define MAX_ZOOM (1ull<<44)
+#define MAX_ZOOM (1ull<<6)
 
 
 inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
@@ -21,12 +21,6 @@ inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
     COLORREF g1 = (0x100 - alpha) * (colora & 0x00FF00);
     COLORREF g2 = alpha * (colorb & 0x00FF00);
     return (((rb1 + rb2) >> 8) & 0xFF00FF) + (((g1 + g2) >> 8) & 0x00FF00);
-
-    //COLORREF rb1 = ((0x100 - alpha) * (colora & 0xFF00FF)) >> 8;
-    //COLORREF rb2 = (alpha * (colorb & 0xFF00FF)) >> 8;
-    //COLORREF g1 = ((0x100 - alpha) * (colora & 0x00FF00)) >> 8;
-    //COLORREF g2 = (alpha * (colorb & 0x00FF00)) >> 8;
-    //return ((rb1 + rb2) & 0xFF00FF) + ((g1 + g2) & 0x00FF00);
 }
 
 
@@ -56,6 +50,8 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
+    ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
+    ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
 END_MESSAGE_MAP()
 
 
@@ -70,7 +66,14 @@ CMandelbrotView::CMandelbrotView()
     m_ColorTable32 = NULL;
     m_BmpBits = NULL;
     m_BuffLen = 0;
-    
+    m_SetType = stMandelbrot;
+    m_JuliaCr = 0.285;
+    m_JuliaCi = 0.01;
+    // Other interesting values :
+    // c = complex(-0.7269, 0.1889)
+    // c = complex(-0.8, 0.156)
+    // c = complex(-0.4, 0.6)
+
     // set default precision for MPIR
     // TODO: change this depending on zoom level. 64 is good for ~x60
     mpf_set_default_prec(64);
@@ -123,8 +126,11 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
  * @param dx: delta coord between pixels
  * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
  * @param dy: delta coord between pixels, negative for top down DIBs
+ * @param cr: Julia constant (Real part)
+ * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0, const mpf_class& dy)
+void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx,
+                                    const mpf_class& y0, const mpf_class& dy, const mpf_class& cr, const mpf_class& ci)
 {
     mpf_class radius = 2.0, radius_sq = radius * radius;
     const double LOG2 = log(2.0);
@@ -135,34 +141,50 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
         xTable[i] = x0 + dx * i;
     }
 
+    bool isJulia = cr != 0 || ci != 0;
+
 #pragma omp parallel for
     for (int l = 0; l < height; ++l) {
         mpf_class y = y0 + (dy * l);
         mpf_class usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
+        mpf_class xc = (isJulia) ? cr : 0; // no need to do this per pixel
+        mpf_class yc = (isJulia) ? ci : y;
+
         //point to start of buffer
         COLORREF* pbuff = pBits + width * l;
 
         for (int k = 0; k < width; ++k) {
             int iter = 0;
-            usq = 0;
-            vsq = 0;
-            u = 0;
-            v = 0;
             x = xTable[k];
+            if (isJulia) {
+                u = x;
+                v = y;
+            }
+            else {
+                u = 0;
+                v = 0;
+                xc = x;
+            }
+            usq = u;
+            usq *= u;
+            vsq = v;
+            vsq *= v;
+            modulus = usq;
+            modulus += vsq;
 
             // complex iterative equation is:
             // C(i) = C(i-1) ^ 2 + C(0)
-            do {
+            while (modulus < radius_sq && ++iter < m_MaxIter) {
                 // real
                 tmp = usq;
                 tmp -= vsq;
-                tmp += x;
+                tmp += xc;
 
                 // imaginary
                 //v = 2.0 * (u * v) + y;
                 v *= u;
                 v *= 2;
-                v += y;
+                v += yc;
                 u = tmp;
                 vsq = v;
                 vsq *= v;
@@ -170,14 +192,12 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
                 usq *= u;
 
                 // check uv vector amplitude is smaller than 2
-                tmp = vsq;
-                tmp += usq;
-                if (tmp >= radius_sq)
-                    break;
-            } while (++iter < m_MaxIter);
+                modulus = vsq;
+                modulus += usq;
+            }
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                double mu = (double)iter + 1 - (log(log(sqrt(tmp.get_d())))) / LOG2;
+                double mu = (double)iter + 1 - (log(log(sqrt(modulus.get_d())))) / LOG2;
                 DWORD index = (DWORD)floor(mu);
                 COLORREF c1 = m_ColorTable32[index];
                 COLORREF c2 = m_ColorTable32[index + 1];
@@ -198,7 +218,7 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
 
 
 /**
- * @brief Draw the Mandelbrot image on a DIB surface - uses double precision floats
+ * @brief Draw the Mandelbrot or Julia image on a DIB surface - uses double precision floats
  * @param pBits: output DIB surface
  * @param width: width in pixels
  * @param height: height in pixels
@@ -206,8 +226,10 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
  * @param dx: delta coord between pixels
  * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
  * @param dy: delta coord between pixels, negative for top down DIBs
+ * @param cr: Julia constant (Real part)
+ * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy)
+void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
 {
     const double radius = 2.0, radius_sq = radius * radius;
     const double LOG2 = log(2.0);
@@ -218,35 +240,52 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
         xTable[i] = x0 + (double)(i) * dx;
     }
 
+    bool isJulia = cr != 0 || ci != 0;
+
 #pragma omp parallel for
     for (int l = 0; l < height; ++l) {
         double y = y0 + (dy * l);
+        double usq = 0, vsq = 0, u = 0, v = 0;
+        double xc = (isJulia) ? cr : 0;
+        double yc = (isJulia) ? ci : y;
 
         //point to start of buffer
         COLORREF* pbuff = pBits + width * l;
 
         for (int k = 0; k < width; ++k) {
             int iter = 0;
-            double usq = 0, vsq = 0, u = 0, v = 0;
             double x = xTable[k];
+            if (isJulia) {
+                u = x, v = y;
+            }
+            else {
+                u = 0, v = 0; xc = x;
+            }
+            usq = u * u;
+            vsq = v * v;
+            double modulus = usq + vsq;
 
             // complex iterative equation is:
-            // C(i) = C(i-1) ^ 2 + C(0)
-            do {
+            // Z(i) = Z(i-1) ^ 2 + C
+            // Mandebrot: Z(0) = 0, C = (x,y)
+            // Julia:     Z(0) = (x,y), C = Constant
+            // 
+            // check uv vector amplitude is smaller than 2
+            while (modulus < radius_sq && ++iter < m_MaxIter) {
                 // real
-                double tmp = usq - vsq + x;
+                double tmp = usq - vsq + xc;
 
                 // imaginary
                 //v = 2.0 * (u * v) + y;
-                v = u * v + u * v + y;
+                v = u * v + u * v + yc;
                 u = tmp;
                 vsq = v * v;
                 usq = u * u;
-                // check uv vector amplitude is smaller than 2
-            } while (vsq + usq < radius_sq && ++iter < m_MaxIter);
+                modulus = vsq + usq;
+            } 
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                double mu = (double)iter + 1 - (log(log(sqrt(vsq + usq)))) / LOG2;
+                double mu = (double)iter + 1 - (log(log(sqrt(modulus)))) / LOG2;
                 DWORD index = (DWORD)floor(mu);
                 COLORREF c1 = m_ColorTable32[index];
                 COLORREF c2 = m_ColorTable32[index + 1];
@@ -300,11 +339,23 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         LARGE_INTEGER time_start, time_end;
         QueryPerformanceCounter(&time_start);
 
+        mpf_class cr = 0, ci = 0;
+        if (m_SetType == stJulia)             {
+            cr = m_JuliaCr, ci = m_JuliaCi;
+        }
         if (m_zoom > MAX_ZOOM) {
-            DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy);
+            DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
         else {
-            DrawImage(m_BmpBits, width, height, m_xmin.get_d(), dx.get_d(), m_ymin.get_d(), dy.get_d());
+            DrawImage(m_BmpBits, width, height, m_xmin.get_d(), dx.get_d(), m_ymin.get_d(), dy.get_d(), cr.get_d(), ci.get_d());
+        }
+
+        switch (m_SetType) {
+        case stMandelbrot:
+            break;
+        case stJulia:
+            break;
+
         }
 
         //all done
@@ -468,11 +519,11 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 
 void CMandelbrotView::OnMButtonDown(UINT nFlags, CPoint point)
 {
+    UNREFERENCED_PARAMETER(nFlags);
+    UNREFERENCED_PARAMETER(point);
     SetDefaultValues();
     m_NeedToRedraw = true;
     Invalidate(FALSE);
-
-    CView::OnMButtonDown(nFlags, point);
 }
 
 
@@ -511,6 +562,35 @@ int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     SetAspectRatio();
 
     return 0;
+}
+
+
+void CMandelbrotView::OnSetTypeSelect(UINT nID)
+{
+    set_type_t set_type = stMandelbrot;
+    switch (nID) {
+    case ID_SETTYPE_MANDELBROT:
+        set_type = stMandelbrot;
+        break;
+    case ID_SETTYPE_JULIA:
+        set_type = stJulia;
+        break;
+    default:
+        DebugPrint(L"OnSetTypeSelect: Invalid nID received %d\n", nID);
+    }
+
+    // no change
+    if (set_type == m_SetType)
+        return;
+    
+    m_SetType = set_type;
+    CMenu* menu = AfxGetMainWnd()->GetMenu();
+    menu->CheckMenuRadioItem(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, nID, MF_BYCOMMAND);
+    
+    // Reset coordinates
+    SetDefaultValues();
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
 }
 
 
@@ -592,16 +672,26 @@ void CMandelbrotView::OnFileSaveImage()
     mpf_class ratio = (double)(height) / (double)(width);
     mpf_class ysize((m_xmax - m_xmin) * (ratio / 2.0));
     mpf_class ymax = ((m_ymax + m_ymin) / 2.0) + ysize;
+    mpf_class cr = 0, ci = 0;
+    if (m_SetType == stJulia) {
+        cr = m_JuliaCr, ci = m_JuliaCi;
+    }
 
     if (m_zoom > MAX_ZOOM) {
-        DrawImageMPIR(pBits, width, height, m_xmin, dx, ymax, -dx);
+        DrawImageMPIR(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
     else {
-        DrawImage(pBits, width, height, m_xmin.get_d(), dx.get_d(), ymax.get_d(), -dx.get_d());
+        DrawImage(pBits, width, height, m_xmin.get_d(), dx.get_d(), ymax.get_d(), -dx.get_d(), cr.get_d(), ci.get_d());
     }
 
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);
     if (!SUCCEEDED(hr)) { 
         AfxMessageBox(L"Failed to save image", MB_ICONINFORMATION);
     }
+}
+
+
+void CMandelbrotView::OnSetTypeChooseJuliaConstant()
+{
+    // TODO: Add your command handler code here
 }
