@@ -58,8 +58,10 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
 END_MESSAGE_MAP()
 
-// CMandelbrotView construction/destruction
 
+/**
+ * @brief CMandelbrotView Constructor
+*/
 CMandelbrotView::CMandelbrotView()
 {
     m_MaxIter = 128;
@@ -93,6 +95,9 @@ CMandelbrotView::CMandelbrotView()
 }
 
 
+/**
+ * @brief CMandelbrotView Destructor
+*/
 CMandelbrotView::~CMandelbrotView()
 {
     delete[] m_ColorTable32;
@@ -109,7 +114,16 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
     return CView::PreCreateWindow(cs);
 }
 
-
+/**
+ * @brief Draw the Mandelbrot image on a DIB surface - uses high precision floats
+ * @param pBits: output DIB surface
+ * @param width: width in pixels
+ * @param height: height in pixels
+ * @param x0: left most coord
+ * @param dx: delta coord between pixels
+ * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
+ * @param dy: delta coord between pixels, negative for top down DIBs
+*/
 void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0, const mpf_class& dy)
 {
     mpf_class radius = 2.0, radius_sq = radius * radius;
@@ -183,16 +197,17 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
 }
 
 
-void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy)
-/* Draw the Mandelbrot image on a DIB surface
-*     pBits: output DIB surface
-*     width: width in pixels
-*     height: height in pixels
-*     x0: left most coord
-*     dx: delta coord between pixels
-*     y0: top or bottom most coord. Depending if the image is top down or bottom up
-*     dy: delta coord between pixels, negative for top down DIBs
+/**
+ * @brief Draw the Mandelbrot image on a DIB surface - uses double precision floats
+ * @param pBits: output DIB surface
+ * @param width: width in pixels
+ * @param height: height in pixels
+ * @param x0: left most coord
+ * @param dx: delta coord between pixels
+ * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
+ * @param dy: delta coord between pixels, negative for top down DIBs
 */
+void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy)
 {
     const double radius = 2.0, radius_sq = radius * radius;
     const double LOG2 = log(2.0);
@@ -250,8 +265,10 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
     delete[] xTable;
 }
 
-
-
+/**
+ * @brief Callback to redraw the image
+ * @param pDC - device context
+*/
 void CMandelbrotView::OnDraw(CDC* pDC)
 {
     SetAspectRatio();
@@ -272,7 +289,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     if (NULL == m_BmpBits) {
         m_BmpInfo.bmiHeader.biHeight = height;
         m_BmpInfo.bmiHeader.biWidth = width;
-        m_BuffLen = height * width;
+        m_BuffLen = (size_t)height * width;
         m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
         m_NeedToRedraw = true;
     }
@@ -310,8 +327,10 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     SetDIBitsToDevice((HDC)(*pDC), 0, 0, width, height, 0, 0, 0, height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
 }
 
-
-void CMandelbrotView::SetDefaultValues(void)
+/**
+ * @brief Sets the default coordinates of the initial view
+*/
+void CMandelbrotView::SetDefaultValues()
 {
     m_xmax = 2.5;
     m_xmin = -m_xmax;
@@ -321,7 +340,10 @@ void CMandelbrotView::SetDefaultValues(void)
 }
 
 
-void CMandelbrotView::SetAspectRatio(void)
+/**
+ * @brief Modifies the Y coordinates based on the X coordinates and the resolution
+*/
+void CMandelbrotView::SetAspectRatio()
 {
     CRect rect;
     GetClientRect(rect);
@@ -345,10 +367,12 @@ void CMandelbrotView::AssertValid() const
     CView::AssertValid();
 }
 
+
 void CMandelbrotView::Dump(CDumpContext& dc) const
 {
     CView::Dump(dc);
 }
+
 
 CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inline
 {
@@ -360,7 +384,11 @@ CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inl
 
 // CMandelbrotView message handlers
 
-//zoom in x2
+/**
+ * @brief Called on Mouse Left click. Zooms in the image by 2x or 4x (if CTRL key is pressed)
+ * @param nFlags holds which mosue or special keys where pressed befor this event
+ * @param point Mouse coord within the client window
+*/
 void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 {
     double zoomMultiplier = 2.0;
@@ -395,7 +423,11 @@ void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 }
 
 
-//zoom out x2
+/**
+ * @brief Called on Mouse Right click. Zooms out the image by 2x or 4x (if CTRL key is pressed)
+ * @param nFlags holds which mosue or special keys where pressed befor this event
+ * @param point Mouse coord within the client window
+*/
 void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 {
     double zoomMultiplier = 2.0;
@@ -428,7 +460,12 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 }
 
 
-//reset to default
+/**
+ * @brief Called on Mouse Middle click. Resets the view.
+ * @param nFlags holds which mosue or special keys where pressed befor this event (not used)
+ * @param point Mouse coord within the client window (not used)
+*/
+
 void CMandelbrotView::OnMButtonDown(UINT nFlags, CPoint point)
 {
     SetDefaultValues();
@@ -439,7 +476,10 @@ void CMandelbrotView::OnMButtonDown(UINT nFlags, CPoint point)
 }
 
 
-void CMandelbrotView::CreateColorTables(void)
+/**
+ * @brief Creates iteration to color mapping depending on the max iteration count
+*/
+void CMandelbrotView::CreateColorTables()
 {
     if (m_ColorTable32)
         delete[] m_ColorTable32;
@@ -474,6 +514,10 @@ int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
 }
 
 
+/**
+ * @brief Callback for menu->iteration selection change. Changes the iteration count and initiates a redraw of the image
+ * @param nID Resource ID of the menu item selected
+*/
 void CMandelbrotView::OnIterationChange(UINT nID)
 {
     if (nID < ID_ITERATIONS || nID > ID_ITERATIONS_LAST) {
@@ -487,15 +531,15 @@ void CMandelbrotView::OnIterationChange(UINT nID)
     menu->CheckMenuRadioItem(ID_ITERATIONS, ID_ITERATIONS_LAST, nID, MF_BYCOMMAND);
     menu->GetMenuString(nID, value, MF_BYCOMMAND);
     m_MaxIter = _ttoi(value);
-    //for (UINT i = ID_ITERATIONS; i <= ID_ITERATIONS_LAST; ++i) {
-    //    menu->CheckMenuItem(i, (i == nID) ? MF_CHECKED : MF_UNCHECKED);
-    //}
     CreateColorTables();
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 }
 
 
+/**
+ * @brief Callback for the ID_VIEW_GREYSCALE command. Toggles between grey and color images.
+*/
 void CMandelbrotView::OnGreyScale()
 {
     CMenu* menu = AfxGetMainWnd()->GetMenu();
@@ -517,6 +561,9 @@ void CMandelbrotView::OnGreyScale()
 }
 
 
+/**
+ * @brief Callback for ID_FILE_SAVE_IMAGE menu item. Save the image to disk. Uses Same X coordinates but modifies the Y coordinates to fit the resolution.
+*/
 void CMandelbrotView::OnFileSaveImage()
 {
     int width = 2560, height = 1440; // TODO: add more resolutions.
@@ -541,14 +588,16 @@ void CMandelbrotView::OnFileSaveImage()
 
     COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
 
-    mpf_class dx((m_xmax - m_xmin) / width);
+    mpf_class dx = (m_xmax - m_xmin) / width;
+    mpf_class ratio = (double)(height) / (double)(width);
+    mpf_class ysize((m_xmax - m_xmin) * (ratio / 2.0));
+    mpf_class ymax = ((m_ymax + m_ymin) / 2.0) + ysize;
 
     if (m_zoom > MAX_ZOOM) {
-        DrawImageMPIR(pBits, width, height, m_xmin, dx, m_ymin, -dx);
-        return;
+        DrawImageMPIR(pBits, width, height, m_xmin, dx, ymax, -dx);
     }
     else {
-        DrawImage(pBits, width, height, m_xmin.get_d(), dx.get_d(), m_ymin.get_d(), -dx.get_d());
+        DrawImage(pBits, width, height, m_xmin.get_d(), dx.get_d(), ymax.get_d(), -dx.get_d());
     }
 
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);

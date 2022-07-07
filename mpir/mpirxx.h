@@ -1584,7 +1584,7 @@ public:
 
   __gmp_expr(const __gmp_expr &z) { mpz_init_set(mp, z.mp); }
 #if __GMPXX_USE_CXX11 || defined( MSC_CXX_11 )
-  __gmp_expr(__gmp_expr &&z)
+  __gmp_expr(__gmp_expr &&z) __GMPXX_NOEXCEPT
   { *mp = *z.mp; mpz_init(z.mp); }
 #endif
   template <class T>
@@ -1793,7 +1793,7 @@ public:
     mpz_init_set(mpq_denref(mp), mpq_denref(q.mp));
   }
 #if __GMPXX_USE_CXX11 || defined( MSC_CXX_11 )
-  __gmp_expr(__gmp_expr &&q)
+  __gmp_expr(__gmp_expr &&q) __GMP_NOTHROW
   { *mp = *q.mp; mpq_init(q.mp); }
 #endif
   template <class T>
@@ -1874,7 +1874,7 @@ public:
 #if __GMPXX_USE_CXX11 || defined( MSC_CXX_11 )
   __gmp_expr & operator=(__gmp_expr &&q) __GMPXX_NOEXCEPT
   { swap(q); return *this; }
-  __gmp_expr & operator=(mpz_class &&z)__GMPXX_NOEXCEPT
+  __gmp_expr & operator=(mpz_class &&z) __GMPXX_NOEXCEPT
   { get_num() = std::move(z); get_den() = 1u; return *this; }
 #endif
   template <class T, class U>
@@ -2002,7 +2002,7 @@ public:
   __gmp_expr(const __gmp_expr &f)
   { mpf_init2(mp, f.get_prec()); mpf_set(mp, f.mp); }
 #if __GMPXX_USE_CXX11 || defined( MSC_CXX_11 )
-  __gmp_expr(__gmp_expr &&f)
+  __gmp_expr(__gmp_expr &&f) __GMP_NOTHROW
   { *mp = *f.mp; mpf_init2(f.mp, get_prec()); }
 #endif
   __gmp_expr(const __gmp_expr &f, mp_bitcnt_t prec)

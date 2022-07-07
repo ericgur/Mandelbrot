@@ -7,6 +7,7 @@
 #ifndef PCH_H
 #define PCH_H
 
+#define __GMPXX_USE_CXX11 1
 // add headers that you want to pre-compile here
 #pragma warning( push )
 #pragma warning( disable: 4127 )
