@@ -113,6 +113,7 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0, const mpf_class& dy)
 {
     mpf_class radius = 2.0, radius_sq = radius * radius;
+    const double LOG2 = log(2.0);
 
     //create x table
     mpf_class* xTable = new mpf_class[width];
@@ -123,7 +124,7 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
 #pragma omp parallel for
     for (int l = 0; l < height; ++l) {
         mpf_class y = y0 + (dy * l);
-        mpf_class usq = 0, vsq = 0, u = 0, v = 0, x, tmp, uv;
+        mpf_class usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
         //point to start of buffer
         COLORREF* pbuff = pBits + width * l;
 
@@ -161,7 +162,20 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
                     break;
             } while (++iter < m_MaxIter);
 
-            *(pbuff++) = m_ColorTable32[iter];
+            if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
+                double mu = (double)iter + 1 - (log(log(sqrt(tmp.get_d())))) / LOG2;
+                DWORD index = (DWORD)floor(mu);
+                COLORREF c1 = m_ColorTable32[index];
+                COLORREF c2 = m_ColorTable32[index + 1];
+                DWORD alpha = (DWORD)(255.0 * (mu - index));
+                if (alpha > 255)
+                    alpha = 255;
+                COLORREF color = blendAlpha(c1, c2, alpha);
+                *(pbuff++) = color;
+            }
+            else {
+                *(pbuff++) = m_ColorTable32[iter];
+            }
         }
     }
 
@@ -217,17 +231,11 @@ void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x
             } while (vsq + usq < radius_sq && ++iter < m_MaxIter);
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                // TODO: find working smooth version
                 double mu = (double)iter + 1 - (log(log(sqrt(vsq + usq)))) / LOG2;
                 DWORD index = (DWORD)floor(mu);
                 COLORREF c1 = m_ColorTable32[index];
                 COLORREF c2 = m_ColorTable32[index + 1];
                 DWORD alpha = (DWORD)(255.0 * (mu - index));
-                //COLORREF c1 = m_ColorTable32[iter];
-                //COLORREF c2 = m_ColorTable32[iter + 1];
-                //DWORD alpha = (DWORD)(128.0 * (sqrt(vsq + usq - radius_sq - x * x))); // 128 = 256 / 2;
-                //double fraction = max(0, log(1 + sqrt(vsq + usq) - radius_sq) / LOG2);
-                //DWORD alpha = 255 - (DWORD)(255.0 * fraction / radius); 
                 if (alpha > 255)
                     alpha = 255;
                 COLORREF color = blendAlpha(c1, c2, alpha);
