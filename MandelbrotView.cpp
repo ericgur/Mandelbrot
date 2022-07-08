@@ -578,6 +578,7 @@ void CMandelbrotView::OnSetTypeSelect(UINT nID)
         break;
     default:
         DebugPrint(L"OnSetTypeSelect: Invalid nID received %d\n", nID);
+        break;
     }
 
     // no change
@@ -691,20 +692,20 @@ void CMandelbrotView::OnFileSaveImage()
     }
 }
 
-
+/**
+ * @brief Callback for ID_SETTYPE_CHOOSEJULIACONSTANT, triggers a dialog that allows the user to select a new Julia set constant.
+*/
 void CMandelbrotView::OnSetTypeChooseJuliaConstant()
 {
-    // TODO: Add your command handler code here
     ComplexSelectDlg dlg(this);
-    dlg.m_Real.Format(L"%lf", m_JuliaCr);
-    dlg.m_Imag.Format(L"%lf", m_JuliaCi);
-
+    dlg.real.Format(L"%lf", m_JuliaCr);
+    dlg.imag.Format(L"%lf", m_JuliaCi);
     
     if (IDCANCEL == dlg.DoModal())
         return; //user pressed cancel
     
-    m_JuliaCr = _ttof(dlg.m_Real);
-    m_JuliaCi = _ttof(dlg.m_Imag);
+    m_JuliaCr = _ttof(dlg.real);
+    m_JuliaCi = _ttof(dlg.imag);
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 }

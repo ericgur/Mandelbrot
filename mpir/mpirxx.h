@@ -127,44 +127,44 @@ inline void __mpz_set_si_safe(mpz_ptr p, mpir_si l)
 }
 
 // Fake temporary variables
-#define __GMPXX_TMPZ_UI							\
-  mpz_t temp;								\
-  mp_limb_t limbs[__GMPZ_ULI_LIMBS];					\
-  temp->_mp_d = limbs;							\
+#define __GMPXX_TMPZ_UI                            \
+  mpz_t temp;                                \
+  mp_limb_t limbs[__GMPZ_ULI_LIMBS];                    \
+  temp->_mp_d = limbs;                            \
   __mpz_set_ui_safe (temp, l)
-#define __GMPXX_TMPZ_SI							\
-  mpz_t temp;								\
-  mp_limb_t limbs[__GMPZ_ULI_LIMBS];					\
-  temp->_mp_d = limbs;							\
+#define __GMPXX_TMPZ_SI                            \
+  mpz_t temp;                                \
+  mp_limb_t limbs[__GMPZ_ULI_LIMBS];                    \
+  temp->_mp_d = limbs;                            \
   __mpz_set_si_safe (temp, l)
-#define __GMPXX_TMPZ_D							\
-  mpz_t temp;								\
-  mp_limb_t limbs[__GMPZ_DBL_LIMBS];					\
-  temp->_mp_d = limbs;							\
-  temp->_mp_alloc = __GMPZ_DBL_LIMBS;					\
+#define __GMPXX_TMPZ_D                            \
+  mpz_t temp;                                \
+  mp_limb_t limbs[__GMPZ_DBL_LIMBS];                    \
+  temp->_mp_d = limbs;                            \
+  temp->_mp_alloc = __GMPZ_DBL_LIMBS;                    \
   mpz_set_d (temp, d)
 
-#define __GMPXX_TMPQ_UI							\
-  mpq_t temp;								\
-  mp_limb_t limbs[__GMPZ_ULI_LIMBS+1];					\
-  mpq_numref(temp)->_mp_d = limbs;					\
-  __mpz_set_ui_safe (mpq_numref(temp), l);				\
-  mpq_denref(temp)->_mp_d = limbs + __GMPZ_ULI_LIMBS;			\
-  mpq_denref(temp)->_mp_size = 1;					\
+#define __GMPXX_TMPQ_UI                            \
+  mpq_t temp;                                \
+  mp_limb_t limbs[__GMPZ_ULI_LIMBS+1];                    \
+  mpq_numref(temp)->_mp_d = limbs;                    \
+  __mpz_set_ui_safe (mpq_numref(temp), l);                \
+  mpq_denref(temp)->_mp_d = limbs + __GMPZ_ULI_LIMBS;            \
+  mpq_denref(temp)->_mp_size = 1;                    \
   mpq_denref(temp)->_mp_d[0] = 1
-#define __GMPXX_TMPQ_SI							\
-  mpq_t temp;								\
-  mp_limb_t limbs[__GMPZ_ULI_LIMBS+1];					\
-  mpq_numref(temp)->_mp_d = limbs;					\
-  __mpz_set_si_safe (mpq_numref(temp), l);				\
-  mpq_denref(temp)->_mp_d = limbs + __GMPZ_ULI_LIMBS;			\
-  mpq_denref(temp)->_mp_size = 1;					\
+#define __GMPXX_TMPQ_SI                            \
+  mpq_t temp;                                \
+  mp_limb_t limbs[__GMPZ_ULI_LIMBS+1];                    \
+  mpq_numref(temp)->_mp_d = limbs;                    \
+  __mpz_set_si_safe (mpq_numref(temp), l);                \
+  mpq_denref(temp)->_mp_d = limbs + __GMPZ_ULI_LIMBS;            \
+  mpq_denref(temp)->_mp_size = 1;                    \
   mpq_denref(temp)->_mp_d[0] = 1
 
 inline mpir_ui __gmpxx_abs_ui (mpir_si l)
 {
   return l >= 0 ? static_cast<mpir_ui>(l)
-	  : static_cast<mpir_ui>(-l);
+      : static_cast<mpir_ui>(-l);
 }
 
 /**************** Function objects ****************/
@@ -545,7 +545,7 @@ struct __gmp_binary_multiplies
       else
       {
         eval(z, w, static_cast<mpir_ui>(-l));
-	mpz_neg(z, z);
+    mpz_neg(z, z);
       }
     }
     else
@@ -568,7 +568,7 @@ struct __gmp_binary_multiplies
     {
       if (l == 0)
       {
-	mpq_set_ui(q, 0, 1);
+    mpq_set_ui(q, 0, 1);
       }
       else
       {
@@ -593,7 +593,7 @@ struct __gmp_binary_multiplies
       else
       {
         eval(q, r, static_cast<mpir_ui>(-l));
-	mpq_neg(q, q);
+    mpq_neg(q, q);
       }
     }
     else
@@ -628,8 +628,8 @@ struct __gmp_binary_multiplies
       mpf_mul_ui(f, g, l);
     else
       {
-	mpf_mul_ui(f, g, static_cast<mpir_ui>(-l));
-	mpf_neg(f, f);
+    mpf_mul_ui(f, g, static_cast<mpir_ui>(-l));
+    mpf_neg(f, f);
       }
   }
   static void eval(mpf_ptr f, mpir_si l, mpf_srcptr g)
@@ -673,21 +673,21 @@ struct __gmp_binary_divides
   {
     if (mpz_sgn(w) >= 0)
       {
-	if (mpz_fits_ui_p(w))
-	  mpz_set_ui(z, l / mpz_get_ui(w));
-	else
-	  mpz_set_ui(z, 0);
+    if (mpz_fits_ui_p(w))
+      mpz_set_ui(z, l / mpz_get_ui(w));
+    else
+      mpz_set_ui(z, 0);
       }
     else
       {
-	mpz_neg(z, w);
-	if (mpz_fits_ui_p(z))
-	  {
-	    mpz_set_ui(z, l / mpz_get_ui(z));
-	    mpz_neg(z, z);
-	  }
-	else
-	  mpz_set_ui(z, 0);
+    mpz_neg(z, w);
+    if (mpz_fits_ui_p(z))
+      {
+        mpz_set_ui(z, l / mpz_get_ui(z));
+        mpz_neg(z, z);
+      }
+    else
+      mpz_set_ui(z, 0);
       }
   }
   static void eval(mpz_ptr z, mpz_srcptr w, mpir_si l)
@@ -696,8 +696,8 @@ struct __gmp_binary_divides
       eval(z, w, static_cast<mpir_ui>(l));
     else
       {
-	eval(z, w, static_cast<mpir_ui>(-l));
-	mpz_neg(z, z);
+    eval(z, w, static_cast<mpir_ui>(-l));
+    mpz_neg(z, z);
       }
   }
   static void eval(mpz_ptr z, mpir_si l, mpz_srcptr w)
@@ -742,7 +742,7 @@ struct __gmp_binary_divides
       else
       {
         eval(q, r, static_cast<mpir_ui>(-l));
-	mpq_neg(q, q);
+    mpq_neg(q, q);
       }
     }
     else
@@ -783,8 +783,8 @@ struct __gmp_binary_divides
       mpf_div_ui(f, g, l);
     else
       {
-	mpf_div_ui(f, g, static_cast<mpir_ui>(-l));
-	mpf_neg(f, f);
+    mpf_div_ui(f, g, static_cast<mpir_ui>(-l));
+    mpf_neg(f, f);
       }
   }
   static void eval(mpf_ptr f, mpir_si l, mpf_srcptr g)
@@ -793,8 +793,8 @@ struct __gmp_binary_divides
       mpf_ui_div(f, l, g);
     else
       {
-	mpf_ui_div(f, static_cast<mpir_ui>(-l), g);
-	mpf_neg(f, f);
+    mpf_ui_div(f, static_cast<mpir_ui>(-l), g);
+    mpf_neg(f, f);
       }
   }
   static void eval(mpf_ptr f, mpf_srcptr g, double d)
@@ -826,18 +826,18 @@ struct __gmp_binary_modulus
   {
     if (mpz_sgn(w) >= 0)
       {
-	if (mpz_fits_ui_p(w))
-	  mpz_set_ui(z, l % mpz_get_ui(w));
-	else
-	  mpz_set_ui(z, l);
+    if (mpz_fits_ui_p(w))
+      mpz_set_ui(z, l % mpz_get_ui(w));
+    else
+      mpz_set_ui(z, l);
       }
     else
       {
-	mpz_neg(z, w);
-	if (mpz_fits_ui_p(z))
-	  mpz_set_ui(z, l % mpz_get_ui(z));
-	else
-	  mpz_set_ui(z, l);
+    mpz_neg(z, w);
+    if (mpz_fits_ui_p(z))
+      mpz_set_ui(z, l % mpz_get_ui(z));
+    else
+      mpz_set_ui(z, l);
       }
   }
   static void eval(mpz_ptr z, mpz_srcptr w, mpir_si l)
@@ -1468,17 +1468,17 @@ namespace std {
     typedef __gmp_expr<T, U> type;
   };
 
-#define __GMPXX_DECLARE_COMMON_TYPE(typ)	\
-  template <class T, class U>			\
-  struct common_type <__gmp_expr<T, U>, typ >	\
-  {						\
-    typedef __gmp_expr<T, T> type;		\
-  };						\
-						\
-  template <class T, class U>			\
-  struct common_type <typ, __gmp_expr<T, U> >	\
-  {						\
-    typedef __gmp_expr<T, T> type;		\
+#define __GMPXX_DECLARE_COMMON_TYPE(typ)    \
+  template <class T, class U>            \
+  struct common_type <__gmp_expr<T, U>, typ >    \
+  {                        \
+    typedef __gmp_expr<T, T> type;        \
+  };                        \
+                        \
+  template <class T, class U>            \
+  struct common_type <typ, __gmp_expr<T, U> >    \
+  {                        \
+    typedef __gmp_expr<T, T> type;        \
   }
 
   __GMPXX_DECLARE_COMMON_TYPE(signed char);
@@ -1834,8 +1834,8 @@ public:
     // If s just happens to evaluate to 0, we would crash, so whatever.
     if (s == 0)
       {
-	// Don't turn mpq_class(0,0) into 0
-	mpz_set_si(mpq_denref(mp), base);
+    // Don't turn mpq_class(0,0) into 0
+    mpz_set_si(mpq_denref(mp), base);
       }
     else if (mpq_set_str(mp, s, base) != 0)
       {
@@ -3092,7 +3092,7 @@ fun(const __gmp_expr<T, U> &expr, mp_bitcnt_t l)                 \
                                                                         \
 template <class T, class U, class V, class W>                           \
 inline type fun(const __gmp_expr<T, U> &expr1,                          \
-		const __gmp_expr<V, W> &expr2)                          \
+        const __gmp_expr<V, W> &expr2)                          \
 {                                                                       \
   typedef typename __gmp_resolve_expr<T, V>::value_type eval_type;      \
   __gmp_expr<eval_type, eval_type> const& temp1(expr1); \
@@ -3101,7 +3101,7 @@ inline type fun(const __gmp_expr<T, U> &expr1,                          \
 }
 
 #define __GMPNN_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun,   \
-					    type2, bigtype)        \
+                        type2, bigtype)        \
                                                                    \
 template <class T, class U>                                        \
 inline type fun(const __gmp_expr<T, U> &expr, type2 t)             \
@@ -3119,11 +3119,11 @@ inline type fun(type2 t, const __gmp_expr<T, U> &expr)             \
 
 #define __GMPNS_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun,                \
-				    type2, mpir_si)
+                    type2, mpir_si)
 
 #define __GMPNU_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun,                \
-				    type2, mpir_ui)
+                    type2, mpir_ui)
 
 #define __GMPND_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_BINARY_TYPE_FUNCTION(type, fun, eval_fun, type2, double)
@@ -3174,27 +3174,27 @@ template <class T, class U>                                                  \
 inline type##_class & type##_class::fun(const __gmp_expr<T, U> &expr)        \
 {                                                                            \
   __gmp_set_expr(mp, __gmp_expr<type##_t, __gmp_binary_expr                  \
-		 <type##_class, __gmp_expr<T, U>, eval_fun> >(*this, expr)); \
+         <type##_class, __gmp_expr<T, U>, eval_fun> >(*this, expr)); \
   return *this;                                                              \
 }
 
 #define __GMPNN_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun,    \
-					 type2, bigtype)         \
+                     type2, bigtype)         \
                                                                  \
 inline type##_class & type##_class::fun(type2 t)                 \
 {                                                                \
   __gmp_set_expr(mp, __gmp_expr<type##_t, __gmp_binary_expr      \
-		 <type##_class, bigtype, eval_fun> >(*this, t)); \
+         <type##_class, bigtype, eval_fun> >(*this, t)); \
   return *this;                                                  \
 }
 
 #define __GMPNS_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun,                \
-				 type2, mpir_si)
+                 type2, mpir_si)
 
 #define __GMPNU_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun,                \
-				 type2, mpir_ui)
+                 type2, mpir_ui)
 
 #define __GMPND_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun, type2) \
 __GMPNN_DEFINE_COMPOUND_OPERATOR(type, fun, eval_fun, type2, double)
@@ -3423,7 +3423,7 @@ public:
   void eval(mpf_ptr f) const
   {
     __gmp_rand_function::eval(f, state,
-	(bits>0) ? bits : mpf_get_prec(f));
+    (bits>0) ? bits : mpf_get_prec(f));
   }
   mp_bitcnt_t get_prec() const
   {
@@ -3456,8 +3456,8 @@ public:
       {
       case GMP_RAND_ALG_LC: // no other cases for now
       default:
-	gmp_randinit(state, alg, size);
-	break;
+    gmp_randinit(state, alg, size);
+    break;
       }
   }
 
@@ -3466,12 +3466,12 @@ public:
 
   // gmp_randinit_lc_2exp
   gmp_randclass(__gmp_randinit_lc_2exp_t* f,
-		mpz_class z, mpir_ui l1, mp_bitcnt_t l2)
+        mpz_class z, mpir_ui l1, mp_bitcnt_t l2)
   { f(state, z.get_mpz_t(), l1, l2); }
 
   // gmp_randinit_lc_2exp_size
   gmp_randclass(__gmp_randinit_lc_2exp_size_t* f,
-		mp_bitcnt_t size)
+        mp_bitcnt_t size)
   {
     if (f (state, size) == 0)
       throw std::length_error ("gmp_randinit_lc_2exp_size");

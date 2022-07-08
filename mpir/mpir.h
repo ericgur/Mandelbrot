@@ -60,7 +60,7 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #endif
 /*  #if defined(__GMP_WITHIN_CONFIGURE) && defined(_WIN64)   */
 #ifdef __WIN64
-#define _LONG_LONG_LIMB	1
+#define _LONG_LONG_LIMB    1
 #endif
 /* __STDC__ - some ANSI compilers define this only to 0, hence the use of
        "defined" and not "__STDC__-0".  In particular Sun workshop C 5.0
@@ -170,15 +170,15 @@ along with the GNU MP Library.  If not, see http://www.gnu.org/licenses/.  */
 #define __GMP_DECLSPEC
 #endif
 #ifdef __GMP_SHORT_LIMB
-typedef unsigned int		mp_limb_t;
-typedef int			mp_limb_signed_t;
+typedef unsigned int        mp_limb_t;
+typedef int            mp_limb_signed_t;
 #else
 #ifdef _LONG_LONG_LIMB
-typedef unsigned long long int	mp_limb_t;
-typedef long long int		mp_limb_signed_t;
+typedef unsigned long long int    mp_limb_t;
+typedef long long int        mp_limb_signed_t;
 #else
-typedef unsigned long int	mp_limb_t;
-typedef long int		mp_limb_signed_t;
+typedef unsigned long int    mp_limb_t;
+typedef long int        mp_limb_signed_t;
 #endif
 #endif
 #ifdef _WIN64
@@ -202,25 +202,25 @@ typedef mpir_ui             mp_bitcnt_t;
    must leave this name for binary compatibility.  */
 typedef struct
 {
-  int _mp_alloc;		/* Number of *limbs* allocated and pointed
-				   to by the _mp_d field.  */
-  int _mp_size;			/* abs(_mp_size) is the number of limbs the
-				   last field points to.  If _mp_size is
-				   negative this is a negative number.  */
-  mp_limb_t *_mp_d;		/* Pointer to the limbs.  */
+  int _mp_alloc;        /* Number of *limbs* allocated and pointed
+                   to by the _mp_d field.  */
+  int _mp_size;            /* abs(_mp_size) is the number of limbs the
+                   last field points to.  If _mp_size is
+                   negative this is a negative number.  */
+  mp_limb_t *_mp_d;        /* Pointer to the limbs.  */
 } __mpz_struct;
 #endif /* __GNU_MP__ */
 typedef __mpz_struct mpz_t[1];
-typedef mp_limb_t *		mp_ptr;
-typedef __gmp_const mp_limb_t *	mp_srcptr;
+typedef mp_limb_t *        mp_ptr;
+typedef __gmp_const mp_limb_t *    mp_srcptr;
 #if defined( _WIN64)
 #define __GMP_MP_SIZE_T_INT     0
-typedef long long int	mp_size_t;
-typedef long int		mp_exp_t;
+typedef long long int    mp_size_t;
+typedef long int        mp_exp_t;
 #else
 #define __GMP_MP_SIZE_T_INT     0
-typedef long int		mp_size_t;
-typedef long int		mp_exp_t;
+typedef long int        mp_size_t;
+typedef long int        mp_exp_t;
 #endif
 typedef struct
 {
@@ -230,15 +230,15 @@ typedef struct
 typedef __mpq_struct mpq_t[1];
 typedef struct
 {
-  int _mp_prec;			/* Max precision, in number of `mp_limb_t's.
-				   Set by mpf_init and modified by
-				   mpf_set_prec.  The area pointed to by the
-				   _mp_d field contains `prec' + 1 limbs.  */
-  int _mp_size;			/* abs(_mp_size) is the number of limbs the
-				   last field points to.  If _mp_size is
-				   negative this is a negative number.  */
-  mp_exp_t _mp_exp;		/* Exponent, in the base of `mp_limb_t'.  */
-  mp_limb_t *_mp_d;		/* Pointer to the limbs.  */
+  int _mp_prec;            /* Max precision, in number of `mp_limb_t's.
+                   Set by mpf_init and modified by
+                   mpf_set_prec.  The area pointed to by the
+                   _mp_d field contains `prec' + 1 limbs.  */
+  int _mp_size;            /* abs(_mp_size) is the number of limbs the
+                   last field points to.  If _mp_size is
+                   negative this is a negative number.  */
+  mp_exp_t _mp_exp;        /* Exponent, in the base of `mp_limb_t'.  */
+  mp_limb_t *_mp_d;        /* Pointer to the limbs.  */
 } __mpf_struct;
 typedef __mpf_struct mpf_t[1];
 /* Available random number generation algorithms.  */
@@ -250,7 +250,7 @@ typedef enum
 /* Random state struct.  */
 typedef struct
 {
-  mpz_t _mp_seed;	  /* _mp_d member points to state of the generator. */
+  mpz_t _mp_seed;      /* _mp_d member points to state of the generator. */
   gmp_randalg_t _mp_alg;  /* Currently unused. */
   union {
     void *_mp_lc;         /* Pointer to function pointers structure.  */
@@ -299,7 +299,7 @@ typedef __gmp_randstate_struct *randstate_ptr;
   || defined (_FILE_DEFINED)          /* Microsoft */           \
   || defined (__STDIO__)              /* Apple MPW MrC */       \
   || defined (_MSL_STDIO_H)           /* Metrowerks */          \
-  || defined (_STDIO_H_INCLUDED)      /* QNX4 */		\
+  || defined (_STDIO_H_INCLUDED)      /* QNX4 */        \
   || defined (_ISO_STDIO_ISO_H)       /* Sun C++ */
 #define _GMP_H_HAVE_FILE 1
 #endif
@@ -464,8 +464,8 @@ using std::FILE;
 #endif
 #define mp_set_memory_functions __gmp_set_memory_functions
 __GMP_DECLSPEC void mp_set_memory_functions(void *(*) (size_t),
-				      void *(*) (void *, size_t, size_t),
-				      void (*) (void *, size_t)) __GMP_NOTHROW;
+                      void *(*) (void *, size_t, size_t),
+                      void (*) (void *, size_t)) __GMP_NOTHROW;
 #define mp_get_memory_functions __gmp_get_memory_functions
 __GMP_DECLSPEC void mp_get_memory_functions(void *(**) (size_t),
                                       void *(**) (void *, size_t, size_t),
@@ -483,8 +483,8 @@ __GMP_DECLSPEC extern __gmp_const char * __gmp_const mpir_version;
 __GMP_DECLSPEC void gmp_randinit_default(gmp_randstate_t);
 #define gmp_randinit_lc_2exp __gmp_randinit_lc_2exp
 __GMP_DECLSPEC void gmp_randinit_lc_2exp(gmp_randstate_t,
-						       mpz_srcptr, mpir_ui,
-						       mp_bitcnt_t);
+                               mpz_srcptr, mpir_ui,
+                               mp_bitcnt_t);
 #define gmp_randinit_lc_2exp_size __gmp_randinit_lc_2exp_size
 __GMP_DECLSPEC int gmp_randinit_lc_2exp_size(gmp_randstate_t, mp_bitcnt_t);
 #define gmp_randinit_mt __gmp_randinit_mt
@@ -1247,7 +1247,7 @@ __GMP_DECLSPEC mp_limb_t mpn_divrem_2(mp_ptr, mp_size_t, mp_ptr, mp_size_t, mp_s
 __GMP_DECLSPEC void mpn_invert(mp_ptr xp, mp_srcptr ap, mp_size_t n);
 #define mpn_sb_divappr_q __MPN(sb_divappr_q)
 __GMP_DECLSPEC mp_limb_t mpn_sb_divappr_q(mp_ptr qp, mp_ptr np, mp_size_t nn,
-		  mp_srcptr dp, mp_size_t dn, mp_limb_t dip); 
+          mp_srcptr dp, mp_size_t dn, mp_limb_t dip); 
 #define mpn_dc_bdiv_q_n __MPN(dc_bdiv_q_n)
 __GMP_DECLSPEC void mpn_dc_bdiv_q_n(mp_ptr qp, mp_ptr wp, mp_ptr np, mp_srcptr dp, mp_size_t n,
                  mp_limb_t dinv, mp_ptr scratch);
@@ -1304,7 +1304,7 @@ __GMP_DECLSPEC void mpn_tdiv_q(mp_ptr qp, mp_srcptr np, mp_size_t nn,
                                    mp_srcptr dp, mp_size_t dn);
 #define mpn_divexact __MPN(divexact)
 __GMP_DECLSPEC void  mpn_divexact(mp_ptr qp,
-	      mp_srcptr np, mp_size_t nn, mp_srcptr dp, mp_size_t dn);
+          mp_srcptr np, mp_size_t nn, mp_srcptr dp, mp_size_t dn);
 #define mpn_gcd __MPN(gcd)
 __GMP_DECLSPEC mp_size_t mpn_gcd(mp_ptr, mp_ptr, mp_size_t, mp_ptr, mp_size_t);
 #define mpn_gcd_1 __MPN(gcd_1)
@@ -1441,16 +1441,16 @@ mpz_abs (mpz_ptr __gmp_w, mpz_srcptr __gmp_u)
 }
 #endif
 #if GMP_NAIL_BITS == 0
-#define __GMPZ_FITS_UTYPE_P(z,maxval)					\
-  mp_size_t  __gmp_n = z->_mp_size;					\
-  mp_ptr  __gmp_p = z->_mp_d;						\
+#define __GMPZ_FITS_UTYPE_P(z,maxval)                    \
+  mp_size_t  __gmp_n = z->_mp_size;                    \
+  mp_ptr  __gmp_p = z->_mp_d;                        \
   return (__gmp_n == 0 || (__gmp_n == 1 && __gmp_p[0] <= maxval));
 #else
-#define __GMPZ_FITS_UTYPE_P(z,maxval)					\
-  mp_size_t  __gmp_n = z->_mp_size;					\
-  mp_ptr  __gmp_p = z->_mp_d;						\
-  return (__gmp_n == 0 || (__gmp_n == 1 && __gmp_p[0] <= maxval)	\
-	  || (__gmp_n == 2 && __gmp_p[1] <= ((mp_limb_t) maxval >> GMP_NUMB_BITS)));
+#define __GMPZ_FITS_UTYPE_P(z,maxval)                    \
+  mp_size_t  __gmp_n = z->_mp_size;                    \
+  mp_ptr  __gmp_p = z->_mp_d;                        \
+  return (__gmp_n == 0 || (__gmp_n == 1 && __gmp_p[0] <= maxval)    \
+      || (__gmp_n == 2 && __gmp_p[1] <= ((mp_limb_t) maxval >> GMP_NUMB_BITS)));
 #endif
 #if defined (__GMP_EXTERN_INLINE) || defined (__GMP_FORCE_mpz_fits_uint_p)
 #if ! defined (__GMP_FORCE_mpz_fits_uint_p)
@@ -1683,86 +1683,86 @@ mpq_neg (mpq_ptr __gmp_w, mpq_srcptr __gmp_u)
    instructions to save and any gain is all too easily lost by register
    juggling setting up for the asm.  */
 #if GMP_NAIL_BITS == 0
-#define __GMPN_AORS_1(cout, dst, src, n, v, OP, CB)		\
-  do {								\
-    mp_size_t  __gmp_i;						\
+#define __GMPN_AORS_1(cout, dst, src, n, v, OP, CB)        \
+  do {                                \
+    mp_size_t  __gmp_i;                        \
     mp_limb_t  __gmp_x, __gmp_r;                                \
-								\
-    /* ASSERT ((n) >= 1); */					\
-    /* ASSERT (MPN_SAME_OR_SEPARATE_P (dst, src, n)); */	\
-								\
-    __gmp_x = (src)[0];						\
+                                \
+    /* ASSERT ((n) >= 1); */                    \
+    /* ASSERT (MPN_SAME_OR_SEPARATE_P (dst, src, n)); */    \
+                                \
+    __gmp_x = (src)[0];                        \
     __gmp_r = __gmp_x OP (v);                                   \
-    (dst)[0] = __gmp_r;						\
+    (dst)[0] = __gmp_r;                        \
     if (CB (__gmp_r, __gmp_x, (v)))                             \
-      {								\
-	(cout) = 1;						\
-	for (__gmp_i = 1; __gmp_i < (n);)                       \
-	  {							\
-	    __gmp_x = (src)[__gmp_i];                           \
-	    __gmp_r = __gmp_x OP 1;                             \
-	    (dst)[__gmp_i] = __gmp_r;                           \
-	    ++__gmp_i;						\
-	    if (!CB (__gmp_r, __gmp_x, 1))                      \
-	      {							\
-		if ((src) != (dst))				\
-		  __GMPN_COPY_REST (dst, src, n, __gmp_i);      \
-		(cout) = 0;					\
-		break;						\
-	      }							\
-	  }							\
-      }								\
-    else							\
-      {								\
-	if ((src) != (dst))					\
-	  __GMPN_COPY_REST (dst, src, n, 1);			\
-	(cout) = 0;						\
-      }								\
+      {                                \
+    (cout) = 1;                        \
+    for (__gmp_i = 1; __gmp_i < (n);)                       \
+      {                            \
+        __gmp_x = (src)[__gmp_i];                           \
+        __gmp_r = __gmp_x OP 1;                             \
+        (dst)[__gmp_i] = __gmp_r;                           \
+        ++__gmp_i;                        \
+        if (!CB (__gmp_r, __gmp_x, 1))                      \
+          {                            \
+        if ((src) != (dst))                \
+          __GMPN_COPY_REST (dst, src, n, __gmp_i);      \
+        (cout) = 0;                    \
+        break;                        \
+          }                            \
+      }                            \
+      }                                \
+    else                            \
+      {                                \
+    if ((src) != (dst))                    \
+      __GMPN_COPY_REST (dst, src, n, 1);            \
+    (cout) = 0;                        \
+      }                                \
   } while (0)
 #endif
 #if GMP_NAIL_BITS >= 1
-#define __GMPN_AORS_1(cout, dst, src, n, v, OP, CB)		\
-  do {								\
-    mp_size_t  __gmp_i;						\
-    mp_limb_t  __gmp_x, __gmp_r;				\
-								\
-    /* ASSERT ((n) >= 1); */					\
-    /* ASSERT (MPN_SAME_OR_SEPARATE_P (dst, src, n)); */	\
-								\
-    __gmp_x = (src)[0];						\
-    __gmp_r = __gmp_x OP (v);					\
-    (dst)[0] = __gmp_r & GMP_NUMB_MASK;				\
-    if (__gmp_r >> GMP_NUMB_BITS != 0)				\
-      {								\
-	(cout) = 1;						\
-	for (__gmp_i = 1; __gmp_i < (n);)			\
-	  {							\
-	    __gmp_x = (src)[__gmp_i];				\
-	    __gmp_r = __gmp_x OP 1;				\
-	    (dst)[__gmp_i] = __gmp_r & GMP_NUMB_MASK;		\
-	    ++__gmp_i;						\
-	    if (__gmp_r >> GMP_NUMB_BITS == 0)			\
-	      {							\
-		if ((src) != (dst))				\
-		  __GMPN_COPY_REST (dst, src, n, __gmp_i);	\
-		(cout) = 0;					\
-		break;						\
-	      }							\
-	  }							\
-      }								\
-    else							\
-      {								\
-	if ((src) != (dst))					\
-	  __GMPN_COPY_REST (dst, src, n, 1);			\
-	(cout) = 0;						\
-      }								\
+#define __GMPN_AORS_1(cout, dst, src, n, v, OP, CB)        \
+  do {                                \
+    mp_size_t  __gmp_i;                        \
+    mp_limb_t  __gmp_x, __gmp_r;                \
+                                \
+    /* ASSERT ((n) >= 1); */                    \
+    /* ASSERT (MPN_SAME_OR_SEPARATE_P (dst, src, n)); */    \
+                                \
+    __gmp_x = (src)[0];                        \
+    __gmp_r = __gmp_x OP (v);                    \
+    (dst)[0] = __gmp_r & GMP_NUMB_MASK;                \
+    if (__gmp_r >> GMP_NUMB_BITS != 0)                \
+      {                                \
+    (cout) = 1;                        \
+    for (__gmp_i = 1; __gmp_i < (n);)            \
+      {                            \
+        __gmp_x = (src)[__gmp_i];                \
+        __gmp_r = __gmp_x OP 1;                \
+        (dst)[__gmp_i] = __gmp_r & GMP_NUMB_MASK;        \
+        ++__gmp_i;                        \
+        if (__gmp_r >> GMP_NUMB_BITS == 0)            \
+          {                            \
+        if ((src) != (dst))                \
+          __GMPN_COPY_REST (dst, src, n, __gmp_i);    \
+        (cout) = 0;                    \
+        break;                        \
+          }                            \
+      }                            \
+      }                                \
+    else                            \
+      {                                \
+    if ((src) != (dst))                    \
+      __GMPN_COPY_REST (dst, src, n, 1);            \
+    (cout) = 0;                        \
+      }                                \
   } while (0)
 #endif
 #define __GMPN_ADDCB(r,x,y) ((r) < (y))
 #define __GMPN_SUBCB(r,x,y) ((x) < (y))
-#define __GMPN_ADD_1(cout, dst, src, n, v)	     \
+#define __GMPN_ADD_1(cout, dst, src, n, v)         \
   __GMPN_AORS_1(cout, dst, src, n, v, +, __GMPN_ADDCB)
-#define __GMPN_SUB_1(cout, dst, src, n, v)	     \
+#define __GMPN_SUB_1(cout, dst, src, n, v)         \
   __GMPN_AORS_1(cout, dst, src, n, v, -, __GMPN_SUBCB)
 /* Compare {xp,size} and {yp,size}, setting "result" to positive, zero or
    negative.  size==0 is allowed.  On random data usually only one limb will
@@ -1863,7 +1863,7 @@ mpn_zero_p (mp_srcptr __gmp_p, mp_size_t __gmp_n) __GMP_NOTHROW
   /* if (__GMP_LIKELY (__gmp_n > 0)) */
     do {
       if (__gmp_p[--__gmp_n] != 0)
-	return 0;
+    return 0;
     } while (__gmp_n != 0);
   return 1;
 }
@@ -1903,7 +1903,7 @@ mpn_neg_n (mp_ptr __gmp_rp, mp_srcptr __gmp_up, mp_size_t __gmp_n)
     {
       *__gmp_rp = 0;
       if (!--__gmp_n) /* All zero */
-	return 0;
+    return 0;
       ++__gmp_up; ++__gmp_rp;
     }
   *__gmp_rp = (- *(mp_limb_signed_t*)__gmp_up) & GMP_NUMB_MASK;
@@ -1922,15 +1922,15 @@ mpn_neg_n (mp_ptr __gmp_rp, mp_srcptr __gmp_up, mp_size_t __gmp_n)
 /* When using GCC, optimize certain common comparisons.  */
 #if defined (__GNUC__)
 #define mpz_cmp_ui(Z,UI) \
-  (__builtin_constant_p (UI) && (UI) == 0				\
+  (__builtin_constant_p (UI) && (UI) == 0                \
    ? mpz_sgn (Z) : _mpz_cmp_ui (Z,UI))
 #define mpz_cmp_si(Z,SI) \
-  (__builtin_constant_p (SI) && (SI) == 0 ? mpz_sgn (Z)			\
-   : __builtin_constant_p (SI) && (SI) > 0				\
-    ? _mpz_cmp_ui (Z, __GMP_CAST (unsigned long int, SI))		\
+  (__builtin_constant_p (SI) && (SI) == 0 ? mpz_sgn (Z)            \
+   : __builtin_constant_p (SI) && (SI) > 0                \
+    ? _mpz_cmp_ui (Z, __GMP_CAST (unsigned long int, SI))        \
    : _mpz_cmp_si (Z,SI))
 #define mpq_cmp_ui(Q,NUI,DUI) \
-  (__builtin_constant_p (NUI) && (NUI) == 0				\
+  (__builtin_constant_p (NUI) && (NUI) == 0                \
    ? mpq_sgn (Q) : _mpq_cmp_ui (Q,NUI,DUI))
 #define mpq_cmp_si(q,n,d)                       \
   (__builtin_constant_p ((n) >= 0) && (n) >= 0  \
@@ -1968,12 +1968,12 @@ __GMP_DECLSPEC_XX std::istream& operator>> (std::istream &, mpf_ptr);
 #define gmp_randinit(x,y,z)  gmp_randinit_lc_2exp_size(x,z)
 typedef __mpz_struct MP_INT;    /* gmp 1 source compatibility */
 typedef __mpq_struct MP_RAT;    /* gmp 1 source compatibility */
-#define mpz_div		    mpz_fdiv_q
-#define mpz_divmod	    mpz_fdiv_qr
-#define mpz_div_ui	    mpz_fdiv_q_ui
-#define mpz_divmod_ui	mpz_fdiv_qr_ui
-#define mpz_div_2exp	mpz_fdiv_q_2exp
-#define mpz_mod_2exp	mpz_fdiv_r_2exp
+#define mpz_div            mpz_fdiv_q
+#define mpz_divmod        mpz_fdiv_qr
+#define mpz_div_ui        mpz_fdiv_q_ui
+#define mpz_divmod_ui    mpz_fdiv_qr_ui
+#define mpz_div_2exp    mpz_fdiv_q_2exp
+#define mpz_mod_2exp    mpz_fdiv_r_2exp
 enum
 {
   GMP_ERROR_NONE = 0,

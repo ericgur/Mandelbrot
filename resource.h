@@ -69,6 +69,8 @@
 #define ID_ITERATIONS_LAST              450
 #define IDC_EDIT_REAL                   1000
 #define IDC_EDIT_IMAG                   1001
+#define IDC_JULIA_PRESETS               1002
+#define IDC_LIST_PRESETS                1004
 #define ID_VIEW_GREYSCALE               32771
 #define ID_Menu                         32772
 #define ID_FILE_SAVE_IMAGE              32773
@@ -82,7 +84,7 @@
 #ifndef APSTUDIO_READONLY_SYMBOLS
 #define _APS_NEXT_RESOURCE_VALUE        312
 #define _APS_NEXT_COMMAND_VALUE         32783
-#define _APS_NEXT_CONTROL_VALUE         1001
+#define _APS_NEXT_CONTROL_VALUE         1005
 #define _APS_NEXT_SYMED_VALUE           310
 #endif
 #endif

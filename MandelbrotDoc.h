@@ -7,8 +7,8 @@
 class CMandelbrotDoc : public CDocument
 {
 protected: // create from serialization only
-	CMandelbrotDoc();
-	DECLARE_DYNCREATE(CMandelbrotDoc)
+    CMandelbrotDoc();
+    DECLARE_DYNCREATE(CMandelbrotDoc)
 
 // Attributes
 public:
@@ -17,23 +17,23 @@ public:
 public:
 
 // Overrides
-	public:
-	virtual BOOL OnNewDocument();
-	virtual void Serialize(CArchive& ar);
+    public:
+    virtual BOOL OnNewDocument();
+    virtual void Serialize(CArchive& ar);
 
 // Implementation
 public:
-	virtual ~CMandelbrotDoc();
+    virtual ~CMandelbrotDoc();
 #ifdef _DEBUG
-	virtual void AssertValid() const;
-	virtual void Dump(CDumpContext& dc) const;
+    virtual void AssertValid() const;
+    virtual void Dump(CDumpContext& dc) const;
 #endif
 
 protected:
 
 // Generated message map functions
 protected:
-	DECLARE_MESSAGE_MAP()
+    DECLARE_MESSAGE_MAP()
 };
 
 
