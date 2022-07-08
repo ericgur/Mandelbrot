@@ -17,6 +17,7 @@ ComplexSelectDlg::ComplexSelectDlg(CWnd* pParent /*=nullptr*/)
 
 }
 
+
 ComplexSelectDlg::~ComplexSelectDlg()
 {
 }
@@ -29,9 +30,14 @@ BOOL ComplexSelectDlg::OnInitDialog()
     presets.AddString(L"-0.7269, 0.1889");
     presets.AddString(L"-0.8, 0.156");
     presets.AddString(L"-0.4, 0.6");
-
+    presets.AddString(L"0.0, -0.8");
+    presets.AddString(L"0.45, 0.1428");
+    presets.AddString(L"-0.70176, -0.3842");
+    presets.AddString(L"-0.75, 0.11");
+    presets.AddString(L"-0.1, 0.651");
     return TRUE;  // return TRUE unless you set the focus to a control  
 }
+
 
 void ComplexSelectDlg::DoDataExchange(CDataExchange* pDX)
 {
@@ -52,12 +58,10 @@ END_MESSAGE_MAP()
 
 void ComplexSelectDlg::OnLbnSelchangeListPresets()
 {
-    // TODO: Add your control notification handler code here
     auto index = presets.GetCurSel();
     CString txt, s;
     presets.GetText(index, txt);
     int pos = 0;
-    //= txt.Tokenize(L", ", pos);
     real = txt.Tokenize(L", ", pos);
     imag = txt.Tokenize(L", ", pos);
     UpdateData(FALSE);

@@ -351,14 +351,6 @@ void CMandelbrotView::OnDraw(CDC* pDC)
             DrawImage(m_BmpBits, width, height, m_xmin.get_d(), dx.get_d(), m_ymin.get_d(), dy.get_d(), cr.get_d(), ci.get_d());
         }
 
-        switch (m_SetType) {
-        case stMandelbrot:
-            break;
-        case stJulia:
-            break;
-
-        }
-
         //all done
         QueryPerformanceCounter(&time_end);
 
