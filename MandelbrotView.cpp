@@ -6,6 +6,9 @@
 #include "MandelbrotDoc.h"
 #include "MandelbrotView.h"
 #include "ComplexSelectDlg.h"
+//#include "float128.h"
+#include "fixed_point.h"
+
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
@@ -61,6 +64,16 @@ END_MESSAGE_MAP()
 */
 CMandelbrotView::CMandelbrotView()
 {
+    double a1 = 1.0;
+    double a2 = 1.0 / (1ull << 22);
+    double a3 = 0.000003;
+    fixed_point128<4> f1 = a1;
+    fixed_point128<4> f2 = a2;
+    fixed_point128<32> f3 = a3;
+    double r1 = f1;
+    double r2 = f2;
+    double r3 = f3;
+
     m_MaxIter = 128;
     m_SmoothLevel = true;
 

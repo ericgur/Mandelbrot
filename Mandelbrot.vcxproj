@@ -134,6 +134,8 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ComplexSelectDlg.h" />
+    <ClInclude Include="fixed_point.h" />
+    <ClInclude Include="float128.h" />
     <ClInclude Include="framework.h" />
     <ClInclude Include="MainFrm.h" />
     <ClInclude Include="Mandelbrot.h" />
