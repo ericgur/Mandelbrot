@@ -35,8 +35,9 @@ private:
     static constexpr int int_bits = I;
     static constexpr int frac_bits = 128 - I;
     static constexpr int upper_frac_bits = (frac_bits <= 64) ? 0 : frac_bits - 64;
-    static constexpr double upper_unity = 1.0 / (double)(1ull << (upper_frac_bits));
+    static constexpr double upper_unity = 1.0 / (double)(1ull << upper_frac_bits);
     static constexpr double lower_unity = upper_unity / (double)(1ull << (32)) / (double)(1ull << (32));
+    static constexpr unsigned __int64 max_qword_value = (unsigned __int64)(-1);
 public:
     fixed_point128() { low = high = 0ull; sign = 0; }
     fixed_point128(double val) {
@@ -49,6 +50,13 @@ public:
         }
         // normal number
         if (e > -1023) {
+            // infinity
+            if (isnan(val) || isinf(val)) {
+                high = low = 0;
+                sign = 0;
+                return;
+            }
+
             // bit 52 in f is the unity value of the float. it needs to move to the unity position in fixed point
             f |= ONE_SHIFT(52);
             int bits_to_shift = 64 - int_bits - 52 + e;
@@ -76,12 +84,22 @@ public:
                 }
             }
         }
+        // too small
+        else {
+            high = low = 0;
+            sign = 0;
+        }
     }
-
-    // operators
-    inline operator unsigned int() { return (int)(high >> (64 - int_bits)) & ((unsigned)(-1)); }
-    inline operator int() { return (int)((__int64)high >> (64 - int_bits)) & ((unsigned)(-1)); }
-    inline operator double() {
+    fixed_point128(unsigned __int64 val) {
+        val = val;
+        high = low = 0;
+        sign = 0;
+        throw std::exception("Not implemented!");
+    }
+    // conversion operators
+    inline operator unsigned int() const { return (int)(high >> (64 - int_bits)) & ((unsigned)(-1)); }
+    inline operator int() const { return (int)((__int64)high >> (64 - int_bits)) & ((unsigned)(-1)); }
+    inline operator double() const {
         double res;
         // common case
     #if int_bits <= 64
@@ -101,5 +119,84 @@ public:
     #endif
         return res;
     }
-    //
+    
+    // math operators
+    fixed_point128& operator+=(fixed_point128& other) {
+        throw std::exception("Not implemented!");
+        return *this;
+    }
+
+    fixed_point128& operator*=(fixed_point128& other) {
+        throw std::exception("Not implemented!");
+        return *this;
+    }
+
+    fixed_point128& operator/=(fixed_point128& other) {
+        throw std::exception("Not implemented!");
+        return *this;
+    }
+
+    fixed_point128& operator<<=(int val) {
+        ASSERT(val >= 0);
+        throw std::exception("Not implemented!");
+        return *this;
+    }
+
+    fixed_point128& operator>>=(int val) {
+        ASSERT(val >= 0);
+        switch (val) {
+        case 0:
+            return *this;
+        case 64:
+            low = high;
+            high = 0;
+            return *this;
+        };
+
+        if (val < 64) {
+            low >>= val;
+            unsigned __int64 tmp = GET_BITS(high, 0, val);
+            low |= tmp << (64 - val);
+            high >>= val;
+        }
+        // val > 64
+        else {
+            low = high >> (val - 64);
+            high = 0;
+        }
+
+        return *this;
+    }
+
+    fixed_point128& operator++(int) {
+        if (int_bits <= 64) {
+            high += (1ull << upper_frac_bits);
+        }
+        else {
+            low += (1 << (128 - int_bits));
+            if (low == 0) {
+                ++high;
+            }
+        }
+        return *this;
+    }
+
+    fixed_point128& operator--(int) {
+        // unity is in the upper QWORD
+        if (int_bits <= 64) {
+            high -= (1ull << upper_frac_bits);
+            if (high == max_qword_value) {
+                high = 0;
+                --low;
+            }
+        }
+        // unity is in the lower QWORD
+        else {
+            low -= (1 << (128 - int_bits));
+            if (low == max_qword_value) {
+                --high;
+            }
+        }
+        return *this;
+    }
 };
