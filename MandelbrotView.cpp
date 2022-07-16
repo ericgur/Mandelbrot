@@ -6,16 +6,19 @@
 #include "MandelbrotDoc.h"
 #include "MandelbrotView.h"
 #include "ComplexSelectDlg.h"
-//#include "float128.h"
-#include "fixed_point.h"
 
 
 #ifdef _DEBUG
 #define new DEBUG_NEW
 #endif
 
+//#define DEEP_DEBUG 1
+
+#ifdef DEEP_DEBUG
+#define MAX_ZOOM (1ull<<1)   // for debug purposes
+#else
 #define MAX_ZOOM (1ull<<44)
-//#define MAX_ZOOM (1ull<<4)   // for debug purposes
+#endif
 
 
 inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
@@ -64,16 +67,6 @@ END_MESSAGE_MAP()
 */
 CMandelbrotView::CMandelbrotView()
 {
-    double a1 = 1.0;
-    double a2 = 1.0 / (1ull << 22);
-    double a3 = 0.000003;
-    fixed_point128<4> f1 = a1;
-    fixed_point128<4> f2 = a2;
-    fixed_point128<32> f3 = a3;
-    double r1 = f1;
-    double r2 = f2;
-    double r3 = f3;
-
     m_MaxIter = 128;
     m_SmoothLevel = true;
 
@@ -90,7 +83,9 @@ CMandelbrotView::CMandelbrotView()
 
     // set default precision for MPIR
     // TODO: change this depending on zoom level. 64 is good for ~x60
+    #ifdef USE_MPIR
     mpf_set_default_prec(64);
+    #endif
 
     //fill bitmap header
     memset(&m_BmpInfo, 0, sizeof(m_BmpInfo));
@@ -131,6 +126,86 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
     return CView::PreCreateWindow(cs);
 }
 
+void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
+                                             const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
+{
+    fixed_8_120_t radius = 2.0, radius_sq = radius * radius;
+    const double LOG2 = log(2.0);
+
+    //create x table
+    fixed_8_120_t* xTable = new fixed_8_120_t[width];
+    for (int i = 0; i < width; ++i) {
+        xTable[i] = x0 + dx * i;
+    }
+
+    bool isJulia = cr || ci ;
+
+#ifndef DEEP_DEBUG
+#pragma omp parallel for
+#endif
+    for (int l = 0; l < height; ++l) {
+        fixed_8_120_t y = y0 + (dy * l);
+        fixed_8_120_t usq = 0.0, vsq = 0.0, u = 0.0, v = 0.0, x, tmp = 0.0, uv, modulus;
+        fixed_8_120_t xc = (isJulia) ? cr : 0.0; // no need to do this per pixel
+        fixed_8_120_t yc = (isJulia) ? ci : y;
+
+        //point to start of buffer
+        COLORREF* pbuff = pBits + width * l;
+
+        for (int k = 0; k < width; ++k) {
+            int iter = 0;
+            x = xTable[k];
+            if (isJulia) {
+                u = x;
+                v = y;
+            }
+            else {
+                u = 0.0;
+                v = 0.0;
+                xc = x;
+            }
+            usq = u * u;
+            vsq = v * v;
+            modulus = usq + vsq;
+
+            // complex iterative equation is:
+            // C(i) = C(i-1) ^ 2 + C(0)
+            while (modulus < radius_sq && ++iter < m_MaxIter) {
+                // real
+                tmp = usq - vsq + xc;
+
+                // imaginary
+                //v = 2.0 * (u * v) + y;
+                v = ((u * v) << 1) + yc;
+                u = tmp;
+
+                usq = u * u;
+                vsq = v * v;
+                // check uv vector amplitude is smaller than 2
+                modulus = usq + vsq;
+            }
+
+            if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
+                double mu = (double)iter + 1 - (log(log(sqrt(modulus)))) / LOG2;
+                DWORD index = (DWORD)floor(mu);
+                COLORREF c1 = m_ColorTable32[index];
+                COLORREF c2 = m_ColorTable32[index + 1];
+                DWORD alpha = (DWORD)(255.0 * (mu - index));
+                if (alpha > 255)
+                    alpha = 255;
+                COLORREF color = blendAlpha(c1, c2, alpha);
+                *(pbuff++) = color;
+            }
+            else {
+                *(pbuff++) = m_ColorTable32[iter];
+            }
+        }
+    }
+
+    delete[] xTable;
+}
+
+
 /**
  * @brief Draw the Mandelbrot image on a DIB surface - uses high precision floats
  * @param pBits: output DIB surface
@@ -143,6 +218,7 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
+#ifdef USE_MPIR
 void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx,
                                     const mpf_class& y0, const mpf_class& dy, const mpf_class& cr, const mpf_class& ci)
 {
@@ -229,7 +305,7 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
 
     delete[] xTable;
 }
-
+#endif //USE_MPIR
 
 /**
  * @brief Draw the Mandelbrot or Julia image on a DIB surface - uses double precision floats
@@ -347,21 +423,22 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         m_NeedToRedraw = true;
     }
 
-    mpf_class dx((m_xmax - m_xmin) / width), dy = dx;
+    fixed_8_120_t dx((m_xmax - m_xmin) * fixed_8_120_t(1.0/ (double)width)), dy = dx;
 
     if (m_NeedToRedraw) {
         LARGE_INTEGER time_start, time_end;
         QueryPerformanceCounter(&time_start);
 
-        mpf_class cr = 0, ci = 0;
+        fixed_8_120_t cr = 0.0, ci = 0.0;
         if (m_SetType == stJulia)             {
             cr = m_JuliaCr, ci = m_JuliaCi;
         }
         if (m_zoom > MAX_ZOOM) {
-            DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageFixedPoint128(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            //DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
         else {
-            DrawImage(m_BmpBits, width, height, m_xmin.get_d(), dx.get_d(), m_ymin.get_d(), dy.get_d(), cr.get_d(), ci.get_d());
+            DrawImage(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
 
         //all done
@@ -408,11 +485,11 @@ void CMandelbrotView::SetAspectRatio()
     //check if window created
     if (0 == rect.Height())
         return;
-    mpf_class ratio = (double)(rect.Height()) / (double)(rect.Width());
-    mpf_class ysize((m_xmax - m_xmin) * (ratio / 2.0));
-    m_ymin = ((m_ymax + m_ymin) / 2.0) - ysize;
-    m_ymax = m_ymin + (2.0 * ysize);
-    DebugPrint(L"SetAspectRatio: ysize=%lf, m_ymin=%lf, m_ymax=%lf\n", ysize.get_d(), m_ymin.get_d(), m_ymax.get_d());
+    fixed_8_120_t ratio = (double)(rect.Height()) / (double)(rect.Width());
+    fixed_8_120_t ysize((m_xmax - m_xmin) * (ratio * fixed_8_120_t(0.5)));
+    m_ymin = ((m_ymax + m_ymin) * fixed_8_120_t(0.5)) - ysize;
+    m_ymax = m_ymin + (fixed_8_120_t(2.0) * ysize);
+    DebugPrint(L"SetAspectRatio: ysize=%lf, m_ymin=%lf, m_ymax=%lf\n", (double)ysize, (double)m_ymin, (double)m_ymax);
 }
 
 
@@ -456,20 +533,20 @@ void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
     CRect rect;
     GetClientRect(&rect);
 
-    mpf_class alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
+    fixed_8_120_t alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
     
     //fix y coords
-    mpf_class quarter((m_ymax - m_ymin) / (zoomMultiplier * 2));
-    mpf_class center(alpha * m_ymax + (1.0 - alpha) * m_ymin);
-    DebugPrint(L"OnLButtonDown: alpha=%lf, quarter=%lf, center=%lf\n", alpha.get_d(), quarter.get_d(), center.get_d());
+    fixed_8_120_t quarter((m_ymax - m_ymin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0)));
+    fixed_8_120_t center(alpha * m_ymax + (fixed_8_120_t(1.0) - alpha) * m_ymin);
+    DebugPrint(L"OnLButtonDown: alpha=%lf, quarter=%lf, center=%lf\n", (double)alpha, (double)quarter, (double)center);
 
     m_ymin = center - quarter;
     m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) / (zoomMultiplier * 2.0);
-    center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
+    quarter = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
+    center = alpha * m_xmax + (fixed_8_120_t(1.0) - alpha) * m_xmin;
     m_xmin = center - quarter;
     m_xmax = center + quarter;
 
@@ -496,17 +573,17 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 
     m_zoom /= zoomMultiplier;
 
-    mpf_class alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
+    fixed_8_120_t alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
     //fix y coords
-    mpf_class quarter((m_ymax - m_ymin) * zoomMultiplier / 2.0);
-    mpf_class center(alpha * m_ymax + (1.0 - alpha) * m_ymin);
+    fixed_8_120_t quarter((m_ymax - m_ymin) * fixed_8_120_t(zoomMultiplier / 2.0));
+    fixed_8_120_t center(alpha * m_ymax + (fixed_8_120_t(1.0) - alpha) * m_ymin);
     m_ymin = center - quarter;
     m_ymax = center + quarter;
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) * zoomMultiplier / 2.0;
-    center = alpha * m_xmax + (1.0 - alpha) * m_xmin;
+    quarter = (m_xmax - m_xmin) * fixed_8_120_t(zoomMultiplier / 2.0);
+    center = alpha * m_xmax + (fixed_8_120_t(1.0) - alpha) * m_xmin;
     m_xmin = center - quarter;
     m_xmax = center + quarter;
 
@@ -675,20 +752,20 @@ void CMandelbrotView::OnFileSaveImage()
 
     COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
 
-    mpf_class dx = (m_xmax - m_xmin) / width;
-    mpf_class ratio = (double)(height) / (double)(width);
-    mpf_class ysize((m_xmax - m_xmin) * (ratio / 2.0));
-    mpf_class ymax = ((m_ymax + m_ymin) / 2.0) + ysize;
-    mpf_class cr = 0, ci = 0;
+    fixed_8_120_t dx = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / width);
+    fixed_8_120_t ratio = (double)(height) / (double)(width);
+    fixed_8_120_t ysize((m_xmax - m_xmin) * (ratio * fixed_8_120_t(0.5)));
+    fixed_8_120_t ymax = ((m_ymax + m_ymin) * fixed_8_120_t(0.5)) + ysize;
+    fixed_8_120_t cr = 0.0, ci = 0.0;
     if (m_SetType == stJulia) {
         cr = m_JuliaCr, ci = m_JuliaCi;
     }
 
     if (m_zoom > MAX_ZOOM) {
-        DrawImageMPIR(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
+        DrawImageFixedPoint128(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
     else {
-        DrawImage(pBits, width, height, m_xmin.get_d(), dx.get_d(), ymax.get_d(), -dx.get_d(), cr.get_d(), ci.get_d());
+        DrawImage(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
 
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);

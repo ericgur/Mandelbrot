@@ -1,6 +1,10 @@
 // MandelbrotView.h : interface of the CMandelbrotView class
 //
 
+#include "fixed_point128.h"
+
+typedef fixed_point128<8> fixed_8_120_t;
+
 #pragma once
 enum set_type_t
 {
@@ -39,7 +43,7 @@ public:
 #endif
 
 protected:
-    mpf_class m_xmin, m_xmax, m_ymin, m_ymax;
+    fixed_8_120_t m_xmin, m_xmax, m_ymin, m_ymax;
     double m_zoom;
     int    m_MaxIter;
     BITMAPINFO m_BmpInfo;
@@ -58,8 +62,12 @@ protected:
     void SetAspectRatio(void);
     void CreateColorTables(void);
     void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
+#ifdef USE_MPIR
     void DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0,
                        const mpf_class& dy, const mpf_class& cr, const mpf_class& ci);
+#endif
+    void DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
+                       const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
 
     // Generated message map functions
 protected:

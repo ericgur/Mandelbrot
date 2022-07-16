@@ -7,12 +7,14 @@
 #ifndef PCH_H
 #define PCH_H
 
+#ifdef USE_MPIR
 #define __GMPXX_USE_CXX11 1
 // add headers that you want to pre-compile here
 #pragma warning( push )
 #pragma warning( disable: 4127 )
 #include <mpirxx.h>
 #pragma warning( pop )
+#endif
 
 #include "framework.h"
 
