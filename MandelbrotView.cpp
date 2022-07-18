@@ -76,16 +76,6 @@ CMandelbrotView::CMandelbrotView()
     m_SetType = stMandelbrot;
     m_JuliaCr = 0.285;
     m_JuliaCi = 0.01;
-    // Other interesting values :
-    // c = complex(-0.7269, 0.1889)
-    // c = complex(-0.8, 0.156)
-    // c = complex(-0.4, 0.6)
-
-    // set default precision for MPIR
-    // TODO: change this depending on zoom level. 64 is good for ~x60
-    #ifdef USE_MPIR
-    mpf_set_default_prec(64);
-    #endif
 
     //fill bitmap header
     memset(&m_BmpInfo, 0, sizeof(m_BmpInfo));
@@ -126,6 +116,19 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
     return CView::PreCreateWindow(cs);
 }
 
+
+/**
+ * @brief Draw the Mandelbrot image on a DIB surface - uses high precision fixed point
+ * @param pBits: output DIB surface
+ * @param width: width in pixels
+ * @param height: height in pixels
+ * @param x0: left most coord
+ * @param dx: delta coord between pixels
+ * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
+ * @param dy: delta coord between pixels, negative for top down DIBs
+ * @param cr: Julia constant (Real part)
+ * @param ci: Julia constant (Imaginary part)
+*/
 void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
                                              const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
 {
@@ -207,107 +210,6 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
 
 
 /**
- * @brief Draw the Mandelbrot image on a DIB surface - uses high precision floats
- * @param pBits: output DIB surface
- * @param width: width in pixels
- * @param height: height in pixels
- * @param x0: left most coord
- * @param dx: delta coord between pixels
- * @param y0: top or bottom most coord. Depending if the image is top down or bottom up
- * @param dy: delta coord between pixels, negative for top down DIBs
- * @param cr: Julia constant (Real part)
- * @param ci: Julia constant (Imaginary part)
-*/
-#ifdef USE_MPIR
-void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx,
-                                    const mpf_class& y0, const mpf_class& dy, const mpf_class& cr, const mpf_class& ci)
-{
-    mpf_class radius = 2.0, radius_sq = radius * radius;
-    const double LOG2 = log(2.0);
-
-    //create x table
-    mpf_class* xTable = new mpf_class[width];
-    for (int i = 0; i < width; ++i) {
-        xTable[i] = x0 + dx * i;
-    }
-
-    bool isJulia = cr != 0 || ci != 0;
-
-#pragma omp parallel for
-    for (int l = 0; l < height; ++l) {
-        mpf_class y = y0 + (dy * l);
-        mpf_class usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
-        mpf_class xc = (isJulia) ? cr : 0; // no need to do this per pixel
-        mpf_class yc = (isJulia) ? ci : y;
-
-        //point to start of buffer
-        COLORREF* pbuff = pBits + width * l;
-
-        for (int k = 0; k < width; ++k) {
-            int iter = 0;
-            x = xTable[k];
-            if (isJulia) {
-                u = x;
-                v = y;
-            }
-            else {
-                u = 0;
-                v = 0;
-                xc = x;
-            }
-            usq = u;
-            usq *= u;
-            vsq = v;
-            vsq *= v;
-            modulus = usq;
-            modulus += vsq;
-
-            // complex iterative equation is:
-            // C(i) = C(i-1) ^ 2 + C(0)
-            while (modulus < radius_sq && ++iter < m_MaxIter) {
-                // real
-                tmp = usq;
-                tmp -= vsq;
-                tmp += xc;
-
-                // imaginary
-                //v = 2.0 * (u * v) + y;
-                v *= u;
-                v *= 2;
-                v += yc;
-                u = tmp;
-                vsq = v;
-                vsq *= v;
-                usq = u;
-                usq *= u;
-
-                // check uv vector amplitude is smaller than 2
-                modulus = vsq;
-                modulus += usq;
-            }
-
-            if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                double mu = (double)iter + 1 - (log(log(sqrt(modulus.get_d())))) / LOG2;
-                DWORD index = (DWORD)floor(mu);
-                COLORREF c1 = m_ColorTable32[index];
-                COLORREF c2 = m_ColorTable32[index + 1];
-                DWORD alpha = (DWORD)(255.0 * (mu - index));
-                if (alpha > 255)
-                    alpha = 255;
-                COLORREF color = blendAlpha(c1, c2, alpha);
-                *(pbuff++) = color;
-            }
-            else {
-                *(pbuff++) = m_ColorTable32[iter];
-            }
-        }
-    }
-
-    delete[] xTable;
-}
-#endif //USE_MPIR
-
-/**
  * @brief Draw the Mandelbrot or Julia image on a DIB surface - uses double precision floats
  * @param pBits: output DIB surface
  * @param width: width in pixels
@@ -319,7 +221,7 @@ void CMandelbrotView::DrawImageMPIR(COLORREF* pBits, int width, int height, cons
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
+void CMandelbrotView::DrawImageDouble(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
 {
     const double radius = 2.0, radius_sq = radius * radius;
     const double LOG2 = log(2.0);
@@ -438,7 +340,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
             //DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
         else {
-            DrawImage(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageDouble(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
 
         //all done
@@ -765,7 +667,7 @@ void CMandelbrotView::OnFileSaveImage()
         DrawImageFixedPoint128(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
     else {
-        DrawImage(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
+        DrawImageDouble(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
 
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);

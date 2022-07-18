@@ -61,11 +61,7 @@ protected:
     void SetDefaultValues(void);
     void SetAspectRatio(void);
     void CreateColorTables(void);
-    void DrawImage(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
-#ifdef USE_MPIR
-    void DrawImageMPIR(COLORREF* pBits, int width, int height, const mpf_class& x0, const mpf_class& dx, const mpf_class& y0,
-                       const mpf_class& dy, const mpf_class& cr, const mpf_class& ci);
-#endif
+    void DrawImageDouble(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
     void DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
 
