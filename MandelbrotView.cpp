@@ -148,8 +148,8 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
 #endif
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
-        fixed_8_120_t usq = 0.0, vsq = 0.0, u = 0.0, v = 0.0, x, tmp = 0.0, uv, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : 0.0; // no need to do this per pixel
+        fixed_8_120_t usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
+        fixed_8_120_t xc = (isJulia) ? cr : 0; // no need to do this per pixel
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         //point to start of buffer
@@ -163,8 +163,8 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
                 v = y;
             }
             else {
-                u = 0.0;
-                v = 0.0;
+                u = 0;
+                v = 0;
                 xc = x;
             }
             usq = u * u;
@@ -278,7 +278,7 @@ void CMandelbrotView::DrawImageDouble(COLORREF* pBits, int width, int height, do
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
                 double mu = (double)iter + 1 - (log(log(sqrt(modulus)))) / LOG2;
-                DWORD index = (DWORD)floor(mu);
+                DWORD index = (DWORD)floor(fabs(mu));
                 COLORREF c1 = m_ColorTable32[index];
                 COLORREF c2 = m_ColorTable32[index + 1];
                 DWORD alpha = (DWORD)(255.0 * (mu - index));
@@ -331,7 +331,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         LARGE_INTEGER time_start, time_end;
         QueryPerformanceCounter(&time_start);
 
-        fixed_8_120_t cr = 0.0, ci = 0.0;
+        fixed_8_120_t cr = 0, ci = 0;
         if (m_SetType == stJulia)             {
             cr = m_JuliaCr, ci = m_JuliaCi;
         }
@@ -370,7 +370,7 @@ void CMandelbrotView::SetDefaultValues()
 {
     m_xmax = 2.5;
     m_xmin = -m_xmax;
-    m_ymax = m_ymin = 0.0;
+    m_ymax = m_ymin = 0;
     m_zoom = 1;
     SetAspectRatio();
 }
@@ -417,8 +417,37 @@ CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inl
 }
 #endif //_DEBUG
 
+void CMandelbrotView::OnZoomChange(CPoint& point, double zoomMultiplier)
+{
+    CRect rect;
+    GetClientRect(&rect);
+    static fixed_8_120_t one = 1;
+
+    //fix y coords
+    fixed_8_120_t alpha = 1.0 - (double)(point.y) / (double)rect.bottom;
+    fixed_8_120_t quarter = (m_ymax - m_ymin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
+    fixed_8_120_t center = alpha * m_ymax + (one - alpha) * m_ymin;
+    DebugPrint(L"OnZoomChange: Y calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
+
+    m_ymin = center - quarter;
+    m_ymax = center + quarter;
+
+    //fix x coords
+    alpha = (double)(point.x) / (double)rect.right;
+    quarter = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
+    center = alpha * m_xmax + (one - alpha) * m_xmin;
+    m_xmin = center - quarter;
+    m_xmax = center + quarter;
+
+    DebugPrint(L"OnZoomChange: X calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
+    DebugPrint(L"OnZoomChange coords: \n\tX: %0.10lf : %0.10lf \n\tY: %0.10lf : %0.10lf\n", (double)m_xmin, (double)m_xmax, (double)m_ymin, (double)m_ymax);
+
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
+}
 
 // CMandelbrotView message handlers
+
 
 /**
  * @brief Called on Mouse Left click. Zooms in the image by 2x or 4x (if CTRL key is pressed)
@@ -428,34 +457,12 @@ CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inl
 void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 {
     double zoomMultiplier = 2.0;
-    if (nFlags & MK_CONTROL)
-        zoomMultiplier = 4.0;
+    if (nFlags & MK_CONTROL) {
+        zoomMultiplier = (nFlags & MK_SHIFT) ? 8.0 : 4.0;
+    }
 
     m_zoom *= zoomMultiplier;
-    CRect rect;
-    GetClientRect(&rect);
-
-    fixed_8_120_t alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
-    
-    //fix y coords
-    fixed_8_120_t quarter((m_ymax - m_ymin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0)));
-    fixed_8_120_t center(alpha * m_ymax + (fixed_8_120_t(1.0) - alpha) * m_ymin);
-    DebugPrint(L"OnLButtonDown: alpha=%lf, quarter=%lf, center=%lf\n", (double)alpha, (double)quarter, (double)center);
-
-    m_ymin = center - quarter;
-    m_ymax = center + quarter;
-
-    //fix x coords
-    alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
-    center = alpha * m_xmax + (fixed_8_120_t(1.0) - alpha) * m_xmin;
-    m_xmin = center - quarter;
-    m_xmax = center + quarter;
-
-    m_NeedToRedraw = true;
-    Invalidate(FALSE);
-
-    // CView::OnLButtonDown(nFlags, point);
+    OnZoomChange(point, zoomMultiplier);
 }
 
 
@@ -466,33 +473,14 @@ void CMandelbrotView::OnLButtonDown(UINT nFlags, CPoint point)
 */
 void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
 {
-    double zoomMultiplier = 2.0;
-    if (nFlags & MK_CONTROL)
-        zoomMultiplier = 4.0;
+    double zoomMultiplier = 0.5;
+    if (nFlags & MK_CONTROL) {
+        zoomMultiplier = (nFlags & MK_SHIFT) ? 0.125 : 0.25;
+    }
 
-    CRect rect;
-    GetClientRect(&rect);
+    m_zoom *= zoomMultiplier;
 
-    m_zoom /= zoomMultiplier;
-
-    fixed_8_120_t alpha(1.0 - ((double)(point.y) / (double)rect.bottom));
-    //fix y coords
-    fixed_8_120_t quarter((m_ymax - m_ymin) * fixed_8_120_t(zoomMultiplier / 2.0));
-    fixed_8_120_t center(alpha * m_ymax + (fixed_8_120_t(1.0) - alpha) * m_ymin);
-    m_ymin = center - quarter;
-    m_ymax = center + quarter;
-
-    //fix x coords
-    alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) * fixed_8_120_t(zoomMultiplier / 2.0);
-    center = alpha * m_xmax + (fixed_8_120_t(1.0) - alpha) * m_xmin;
-    m_xmin = center - quarter;
-    m_xmax = center + quarter;
-
-    m_NeedToRedraw = true;
-    Invalidate(FALSE);
-
-    //CView::OnRButtonDown(nFlags, point);
+    OnZoomChange(point, zoomMultiplier);
 }
 
 
@@ -658,7 +646,7 @@ void CMandelbrotView::OnFileSaveImage()
     fixed_8_120_t ratio = (double)(height) / (double)(width);
     fixed_8_120_t ysize((m_xmax - m_xmin) * (ratio * fixed_8_120_t(0.5)));
     fixed_8_120_t ymax = ((m_ymax + m_ymin) * fixed_8_120_t(0.5)) + ysize;
-    fixed_8_120_t cr = 0.0, ci = 0.0;
+    fixed_8_120_t cr = 0, ci = 0;
     if (m_SetType == stJulia) {
         cr = m_JuliaCr, ci = m_JuliaCi;
     }

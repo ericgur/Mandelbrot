@@ -64,7 +64,7 @@ protected:
     void DrawImageDouble(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
     void DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
-
+    void OnZoomChange(CPoint& point, double zoomMultiplier);
     // Generated message map functions
 protected:
     DECLARE_MESSAGE_MAP()
