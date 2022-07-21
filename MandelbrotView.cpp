@@ -57,6 +57,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
+    ON_COMMAND(ID_VIEW_RESETVIEW, &CMandelbrotView::OnResetView)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
 END_MESSAGE_MAP()
@@ -132,7 +133,7 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
                                              const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
 {
-    fixed_8_120_t radius = 2.0, radius_sq = radius * radius;
+    fixed_8_120_t radius = 2, radius_sq = radius * radius;
     const double LOG2 = log(2.0);
 
     //create x table
@@ -149,7 +150,7 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
         fixed_8_120_t usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : 0; // no need to do this per pixel
+        fixed_8_120_t xc = (isJulia) ? cr : 0; // no need to do this per pixel for Julia
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         //point to start of buffer
@@ -158,18 +159,24 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
         for (int k = 0; k < width; ++k) {
             int iter = 0;
             x = xTable[k];
+            // Julia
             if (isJulia) {
                 u = x;
                 v = y;
+                usq = u * u;
+                vsq = v * v;
+                modulus = usq + vsq;
             }
+            // Mandelbrot
             else {
                 u = 0;
                 v = 0;
+                usq = 0;
+                vsq = 0;
                 xc = x;
+                modulus = 0;
             }
-            usq = u * u;
-            vsq = v * v;
-            modulus = usq + vsq;
+            
 
             // complex iterative equation is:
             // C(i) = C(i-1) ^ 2 + C(0)
@@ -325,7 +332,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         m_NeedToRedraw = true;
     }
 
-    fixed_8_120_t dx((m_xmax - m_xmin) * fixed_8_120_t(1.0/ (double)width)), dy = dx;
+    fixed_8_120_t dx((m_xmax - m_xmin) * fixed_8_120_t(1.0 / (double)width)), dy = dx;
 
     if (m_NeedToRedraw) {
         LARGE_INTEGER time_start, time_end;
@@ -387,10 +394,11 @@ void CMandelbrotView::SetAspectRatio()
     //check if window created
     if (0 == rect.Height())
         return;
+
     fixed_8_120_t ratio = (double)(rect.Height()) / (double)(rect.Width());
-    fixed_8_120_t ysize((m_xmax - m_xmin) * (ratio * fixed_8_120_t(0.5)));
-    m_ymin = ((m_ymax + m_ymin) * fixed_8_120_t(0.5)) - ysize;
-    m_ymax = m_ymin + (fixed_8_120_t(2.0) * ysize);
+    fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
+    m_ymin = ((m_ymax + m_ymin) >> 1) - ysize;
+    m_ymax = m_ymin + (ysize << 1);
     DebugPrint(L"SetAspectRatio: ysize=%lf, m_ymin=%lf, m_ymax=%lf\n", (double)ysize, (double)m_ymin, (double)m_ymax);
 }
 
@@ -494,11 +502,19 @@ void CMandelbrotView::OnMButtonDown(UINT nFlags, CPoint point)
 {
     UNREFERENCED_PARAMETER(nFlags);
     UNREFERENCED_PARAMETER(point);
+    OnResetView();
+}
+
+
+/**
+ * @brief Reset the view to default coordinates and zoom
+*/
+void CMandelbrotView::OnResetView()
+{
     SetDefaultValues();
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 }
-
 
 /**
  * @brief Creates iteration to color mapping depending on the max iteration count
@@ -642,10 +658,10 @@ void CMandelbrotView::OnFileSaveImage()
 
     COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
 
-    fixed_8_120_t dx = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / width);
+    fixed_8_120_t dx = (m_xmax - m_xmin) * (1.0 / width);
     fixed_8_120_t ratio = (double)(height) / (double)(width);
-    fixed_8_120_t ysize((m_xmax - m_xmin) * (ratio * fixed_8_120_t(0.5)));
-    fixed_8_120_t ymax = ((m_ymax + m_ymin) * fixed_8_120_t(0.5)) + ysize;
+    fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
+    fixed_8_120_t ymax = ((m_ymax + m_ymin) >> 1) + ysize;
     fixed_8_120_t cr = 0, ci = 0;
     if (m_SetType == stJulia) {
         cr = m_JuliaCr, ci = m_JuliaCi;

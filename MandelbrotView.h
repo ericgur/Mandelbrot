@@ -76,6 +76,7 @@ protected:
     afx_msg void OnIterationChange(UINT nID);
     afx_msg void OnGreyScale();
     afx_msg void OnFileSaveImage();
+    afx_msg void OnResetView();
     afx_msg void OnSetTypeChooseJuliaConstant();
 };
 
