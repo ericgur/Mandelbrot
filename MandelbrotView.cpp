@@ -58,6 +58,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
     ON_COMMAND(ID_VIEW_RESETVIEW, &CMandelbrotView::OnResetView)
+    ON_COMMAND(ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnHistogramColoring)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
 END_MESSAGE_MAP()
@@ -70,9 +71,10 @@ CMandelbrotView::CMandelbrotView()
 {
     m_MaxIter = 128;
     m_SmoothLevel = true;
-
-    m_ColorTable32 = NULL;
-    m_BmpBits = NULL;
+    m_HistogramColoring = false;
+    m_ColorTable32 = nullptr;
+    m_BmpBits = nullptr;
+    m_Iterations = nullptr;
     m_BuffLen = 0;
     m_SetType = stMandelbrot;
     m_JuliaCr = 0.285;
@@ -106,6 +108,8 @@ CMandelbrotView::~CMandelbrotView()
     delete[] m_ColorTable32;
     if (m_BmpBits)
         free(m_BmpBits);
+    if (m_Iterations)
+        delete[] m_Iterations;
 }
 
 
@@ -118,9 +122,141 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 }
 
 
+void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
+{
+    if (!m_HistogramColoring) {
+        for (int l = 0; l < height; ++l) {
+            //point to start of buffer
+            COLORREF* pDibPixel = pBits + width * l;
+            const float* pIter = pIterations + width * l;
+
+            for (int k = 0; k < width; ++k) {
+                float mu = *pIter++;
+                if (mu >= m_MaxIter) {
+                    *(pDibPixel++) = 0;
+                    continue;
+                }
+
+                DWORD index = (DWORD)floor(mu);
+
+                if (index < 1) {
+                    *(pDibPixel++) = m_ColorTable32[1];
+                }
+                else {
+                    COLORREF c1 = m_ColorTable32[index];
+                    COLORREF c2 = m_ColorTable32[index + 1];
+                    DWORD alpha = (DWORD)(255.0 * (mu - index));
+                    if (alpha > 255)
+                        alpha = 255;
+                    *(pDibPixel++) = blendAlpha(c1, c2, alpha);
+                }
+            }
+        }
+        return;
+    }
+
+    // create histogram
+    int* histogram = new int[m_MaxIter + 1];
+    ZeroMemory(histogram, sizeof(int) * (m_MaxIter + 1));
+    float* hues = new float[m_MaxIter + 1];
+    ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1));
+    COLORREF* hsv2COLORREF = new COLORREF[m_MaxIter + 1];
+    ZeroMemory(hsv2COLORREF, sizeof(COLORREF) * (m_MaxIter + 1));
+
+    // TODO: make this code parallel
+    // create histogram of the iterations
+    for (int l = 0; l < height; ++l) {
+        const float* pIter = pIterations + width * l;
+        for (int k = 0; k < width; ++k) {
+            int iter = (int)floorf(*pIter);
+            iter = max(iter, 1);
+            if (iter < m_MaxIter)
+                ++histogram[iter];
+
+            ++pIter;
+        }
+    }
+    
+    // normalize the iterations
+    int total = 0;
+    for (int i = 0; i < m_MaxIter; ++i) { // not counting the max iteration score (always black)
+        total += histogram[i];
+    }
+    
+    float hue = 0;
+    for (int i = 0; i < m_MaxIter; ++i) {
+        hue += (float)histogram[i] / total;
+        hues[i] = min(hue, 1.f);
+    }
+    hues[m_MaxIter] = min(hue, 1.f);
+
+    // create HSV to COLORREF table
+
+    for (int i = 0; i <= m_MaxIter; ++i) {
+        float h = hues[i] * 6;
+        float x = (1.0f - abs(fmodf(h, 2) - 1.0f));
+        switch ((int)floorf(h) % 6) {
+        case 0: // 0-60 
+            hsv2COLORREF[i] = RGB(255, int(x * 255), 0);
+            break;
+        case 1: // 60-120
+            hsv2COLORREF[i] = RGB(int(x * 255), 255, 0);
+            break;
+        case 2: // 120-180 
+            hsv2COLORREF[i] = RGB(0, 255, int(x * 255));
+            break;
+        case 3: // 180-240
+            hsv2COLORREF[i] = RGB(0, int(x * 255), 255);
+            break;
+        case 4: // 240-300
+            hsv2COLORREF[i] = RGB(int(x * 255), 0, 255);
+            break;
+        case 5: // 300-360
+            hsv2COLORREF[i] = RGB(255, 0, int(x * 255));
+            break;
+        default: //bug
+            hsv2COLORREF[i] = RGB(255, 255, 255);
+        }
+    }
+
+#ifndef DEEP_DEBUG
+#pragma omp parallel for
+#endif
+    for (int l = 0; l < height; ++l) {
+        //point to start of buffer
+        COLORREF* pDibPixel = pBits + width * l;
+        const float* pIter = pIterations + width * l;
+
+        for (int k = 0; k < width; ++k) {
+            float mu = *pIter++;
+            if (mu >= m_MaxIter) {
+                *(pDibPixel++) = 0;
+                continue;
+            }
+
+            DWORD index = (DWORD)floor(mu);
+            if (index < 0) {
+                *(pDibPixel++) = hsv2COLORREF[0];
+            }
+            else {
+                COLORREF c1 = hsv2COLORREF[index];
+                COLORREF c2 = hsv2COLORREF[index + 1];
+                DWORD alpha = (DWORD)(255.0 * (mu - index));
+                if (alpha > 255)
+                    alpha = 255;
+                *(pDibPixel++) = blendAlpha(c1, c2, alpha);
+            }
+        }
+    }
+
+    delete[] histogram;
+    delete[] hues;
+    delete[] hsv2COLORREF;
+}
+
 /**
  * @brief Draw the Mandelbrot image on a DIB surface - uses high precision fixed point
- * @param pBits: output DIB surface
+ * @param pIterations: output iterations per pixel
  * @param width: width in pixels
  * @param height: height in pixels
  * @param x0: left most coord
@@ -130,11 +266,11 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
+void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
                                              const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
 {
     fixed_8_120_t radius = 2, radius_sq = radius * radius;
-    const double LOG2 = log(2.0);
+    const float LOG2 = logf(2.0);
 
     //create x table
     fixed_8_120_t* xTable = new fixed_8_120_t[width];
@@ -154,7 +290,7 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         //point to start of buffer
-        COLORREF* pbuff = pBits + width * l;
+        float* pbuff = pIterations + width * l;
 
         for (int k = 0; k < width; ++k) {
             int iter = 0;
@@ -176,7 +312,6 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
                 xc = x;
                 modulus = 0;
             }
-            
 
             // complex iterative equation is:
             // C(i) = C(i-1) ^ 2 + C(0)
@@ -188,26 +323,18 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
                 //v = 2.0 * (u * v) + y;
                 v = ((u * v) << 1) + yc;
                 u = tmp;
-
                 usq = u * u;
                 vsq = v * v;
                 // check uv vector amplitude is smaller than 2
                 modulus = usq + vsq;
             }
 
-            if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                double mu = (double)iter + 1 - (log(log(sqrt(modulus)))) / LOG2;
-                DWORD index = (DWORD)floor(mu);
-                COLORREF c1 = m_ColorTable32[index];
-                COLORREF c2 = m_ColorTable32[index + 1];
-                DWORD alpha = (DWORD)(255.0 * (mu - index));
-                if (alpha > 255)
-                    alpha = 255;
-                COLORREF color = blendAlpha(c1, c2, alpha);
-                *(pbuff++) = color;
+            if (m_SmoothLevel && iter < m_MaxIter && iter > 1) {
+                // TODO: simplify casting once operator float is implemented
+                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)(double)modulus)))) / LOG2;
             }
             else {
-                *(pbuff++) = m_ColorTable32[iter];
+                *(pbuff++) = (float)min(iter, 1);
             }
         }
     }
@@ -218,7 +345,7 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
 
 /**
  * @brief Draw the Mandelbrot or Julia image on a DIB surface - uses double precision floats
- * @param pBits: output DIB surface
+ * @param pIterations: output iterations per pixel
  * @param width: width in pixels
  * @param height: height in pixels
  * @param x0: left most coord
@@ -228,10 +355,10 @@ void CMandelbrotView::DrawImageFixedPoint128(COLORREF* pBits, int width, int hei
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImageDouble(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
+void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
 {
-    const double radius = 2.0, radius_sq = radius * radius;
-    const double LOG2 = log(2.0);
+    const float radius = 2.0, radius_sq = radius * radius;
+    const float LOG2 = logf(2.0);
 
     //create x table
     double* xTable = new double[width];
@@ -247,22 +374,27 @@ void CMandelbrotView::DrawImageDouble(COLORREF* pBits, int width, int height, do
         double usq = 0, vsq = 0, u = 0, v = 0;
         double xc = (isJulia) ? cr : 0;
         double yc = (isJulia) ? ci : y;
+        double modulus = 0;
 
         //point to start of buffer
-        COLORREF* pbuff = pBits + width * l;
+        float* pbuff = pIterations + width * l;
 
         for (int k = 0; k < width; ++k) {
             int iter = 0;
             double x = xTable[k];
+            // Julia
             if (isJulia) {
                 u = x, v = y;
+                usq = u * u;
+                vsq = v * v;
+                modulus = usq + vsq;
             }
+            // Mandelbrot
             else {
                 u = 0, v = 0; xc = x;
+                usq = 0, vsq = 0;
+                modulus = 0;
             }
-            usq = u * u;
-            vsq = v * v;
-            double modulus = usq + vsq;
 
             // complex iterative equation is:
             // Z(i) = Z(i-1) ^ 2 + C
@@ -282,20 +414,11 @@ void CMandelbrotView::DrawImageDouble(COLORREF* pBits, int width, int height, do
                 usq = u * u;
                 modulus = vsq + usq;
             } 
-
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                double mu = (double)iter + 1 - (log(log(sqrt(modulus)))) / LOG2;
-                DWORD index = (DWORD)floor(fabs(mu));
-                COLORREF c1 = m_ColorTable32[index];
-                COLORREF c2 = m_ColorTable32[index + 1];
-                DWORD alpha = (DWORD)(255.0 * (mu - index));
-                if (alpha > 255)
-                    alpha = 255;
-                COLORREF color = blendAlpha(c1, c2, alpha);
-                *(pbuff++) = color;
+                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
             }
             else {
-                *(pbuff++) = m_ColorTable32[iter];
+                *(pbuff++) = (float)iter;
             }
         }
     }
@@ -317,18 +440,22 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     GetClientRect(rect);
     const int width = rect.Width(), height = rect.Height();
 
-    //deallocate on size change
+    // deallocate on size change
     if (m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width) {
         free(m_BmpBits);
-        m_BmpBits = NULL;
+        m_BmpBits = nullptr;
+        if (m_Iterations != nullptr)
+            delete[] m_Iterations;
+        m_Iterations = nullptr;
     }
 
-    //allocate new bitmap if needed
-    if (NULL == m_BmpBits) {
+    // allocate new bitmap if needed
+    if (nullptr == m_BmpBits) {
         m_BmpInfo.bmiHeader.biHeight = height;
         m_BmpInfo.bmiHeader.biWidth = width;
         m_BuffLen = (size_t)height * width;
         m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
+        m_Iterations = new float[width * height];
         m_NeedToRedraw = true;
     }
 
@@ -343,12 +470,14 @@ void CMandelbrotView::OnDraw(CDC* pDC)
             cr = m_JuliaCr, ci = m_JuliaCi;
         }
         if (m_zoom > MAX_ZOOM) {
-            DrawImageFixedPoint128(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
-            //DrawImageMPIR(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageFixedPoint128(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
         else {
-            DrawImageDouble(m_BmpBits, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageDouble(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
+
+        // convert iterations to DIB image
+        CreateDibFromIterations(m_BmpBits, m_Iterations, width, height);
 
         //all done
         QueryPerformanceCounter(&time_end);
@@ -607,6 +736,25 @@ void CMandelbrotView::OnIterationChange(UINT nID)
 }
 
 
+void CMandelbrotView::OnHistogramColoring()
+{
+    CMenu* menu = AfxGetMainWnd()->GetMenu();
+    int state = menu->GetMenuState(ID_VIEW_HISTOGRAMCOLORING, MF_BYCOMMAND);
+
+    if (state & MF_CHECKED) {
+        menu->CheckMenuItem(ID_VIEW_HISTOGRAMCOLORING, MF_UNCHECKED | MF_BYCOMMAND);
+        m_HistogramColoring = false;
+    }
+    else {
+        menu->CheckMenuItem(ID_VIEW_HISTOGRAMCOLORING, MF_CHECKED | MF_BYCOMMAND);
+        m_HistogramColoring = true;
+    }
+
+    CreateColorTables();
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
+}
+
 /**
  * @brief Callback for the ID_VIEW_GREYSCALE command. Toggles between grey and color images.
 */
@@ -657,7 +805,7 @@ void CMandelbrotView::OnFileSaveImage()
 
 
     COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
-
+    float* pIterations = new float[width * height];
     fixed_8_120_t dx = (m_xmax - m_xmin) * (1.0 / width);
     fixed_8_120_t ratio = (double)(height) / (double)(width);
     fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
@@ -668,16 +816,20 @@ void CMandelbrotView::OnFileSaveImage()
     }
 
     if (m_zoom > MAX_ZOOM) {
-        DrawImageFixedPoint128(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
+        DrawImageFixedPoint128(pIterations, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
     else {
-        DrawImageDouble(pBits, width, height, m_xmin, dx, ymax, -dx, cr, ci);
+        DrawImageDouble(pIterations, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
+
+    CreateDibFromIterations(pBits, pIterations, width, height);
 
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);
     if (!SUCCEEDED(hr)) { 
         AfxMessageBox(L"Failed to save image", MB_ICONINFORMATION);
     }
+
+    delete[] pIterations;
 }
 
 /**

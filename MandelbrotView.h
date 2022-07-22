@@ -50,20 +50,24 @@ protected:
     size_t  m_BuffLen;
     COLORREF* m_ColorTable32;
     COLORREF* m_BmpBits;
+    float* m_Iterations;
     double m_Frequency;
     bool m_NeedToRedraw;
     bool m_GreyScale;
+    bool m_HistogramColoring;
     bool m_SmoothLevel;
     set_type_t m_SetType;
     double m_JuliaCr, m_JuliaCi; // real and imaginary parts of the Julia constant
 
     // Set default values for zoom and coords
-    void SetDefaultValues(void);
-    void SetAspectRatio(void);
-    void CreateColorTables(void);
-    void DrawImageDouble(COLORREF* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
-    void DrawImageFixedPoint128(COLORREF* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
+    void SetDefaultValues();
+    void SetAspectRatio();
+    void CreateColorTables();
+    void CreateHsvTable();
+    void DrawImageDouble(float* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
+    void DrawImageFixedPoint128(float* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
+    void CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height);
     void OnZoomChange(CPoint& point, double zoomMultiplier);
     // Generated message map functions
 protected:
@@ -76,6 +80,7 @@ protected:
     afx_msg void OnIterationChange(UINT nID);
     afx_msg void OnGreyScale();
     afx_msg void OnFileSaveImage();
+    afx_msg void OnHistogramColoring();
     afx_msg void OnResetView();
     afx_msg void OnSetTypeChooseJuliaConstant();
 };
