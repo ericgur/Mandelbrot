@@ -12,7 +12,7 @@
 #define new DEBUG_NEW
 #endif
 
-//#define DEEP_DEBUG 1
+#define DEEP_DEBUG 1
 
 #ifdef DEEP_DEBUG
 #define MAX_ZOOM (1ull<<1)   // for debug purposes
@@ -334,7 +334,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
                 *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)(double)modulus)))) / LOG2;
             }
             else {
-                *(pbuff++) = (float)min(iter, 1);
+                *(pbuff++) = (float)max(iter, 1);
             }
         }
     }
@@ -418,7 +418,7 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
                 *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
             }
             else {
-                *(pbuff++) = (float)iter;
+                *(pbuff++) = (float)max(iter, 1);
             }
         }
     }

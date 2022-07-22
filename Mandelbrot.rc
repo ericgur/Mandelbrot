@@ -204,6 +204,7 @@ BEGIN
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR,MFT_STRING,MFS_ENABLED
         MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
         MENUITEM "Histogram Coloring",          ID_VIEW_HISTOGRAMCOLORING,MFT_STRING,MFS_ENABLED
+        MENUITEM MFT_SEPARATOR
         MENUITEM "Reset View",                  ID_VIEW_RESETVIEW,MFT_STRING,MFS_ENABLED
     END
     POPUP "Set Type",                       65535,MFT_STRING,MFS_ENABLED
