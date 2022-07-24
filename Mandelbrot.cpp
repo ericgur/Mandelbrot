@@ -27,7 +27,6 @@ END_MESSAGE_MAP()
 
 CMandelbrotApp::CMandelbrotApp()
 {
-    // TODO: add construction code here,
     // Place all significant initialization in InitInstance
 }
 

@@ -319,6 +319,7 @@ public:
         static constexpr int lsb = frac_bits & MAX_BITS_VALUE_64(6);
         static constexpr int lsb_comp = 64 - lsb;
         static constexpr uint64 lsb_comp_mask = MAX_BITS_VALUE_64(lsb_comp);
+        static_assert(lsb <= 64);
 
         //printf("index %i, lsb %i, lsb_comp %i", index, lsb, lsb_comp);
         // copy block #1 (lowest)

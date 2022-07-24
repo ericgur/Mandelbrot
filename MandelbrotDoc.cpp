@@ -22,8 +22,6 @@ END_MESSAGE_MAP()
 
 CMandelbrotDoc::CMandelbrotDoc()
 {
-    // TODO: add one-time construction code here
-
 }
 
 

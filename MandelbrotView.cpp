@@ -12,14 +12,32 @@
 #define new DEBUG_NEW
 #endif
 
-#define DEEP_DEBUG 1
+// debug helper macros
+//#define DISABLE_OMP 1
+//#define FLOAT128_DEBUG 1
+//#define INITIAL_POINT 1
 
-#ifdef DEEP_DEBUG
+#ifdef FLOAT128_DEBUG
 #define MAX_ZOOM (1ull<<1)   // for debug purposes
 #else
 #define MAX_ZOOM (1ull<<44)
 #endif
 
+#ifdef INITIAL_POINT
+double x_init[] = {-1.1402282717, -1.1400756838};
+double y_init[] = {0.2097799200, 0.2098570171};
+double zoom_init = 32768;
+#endif
+
+//inline COLORREF blendAlpha(COLORREF a, COLORREF b, DWORD alpha)
+//{
+//    //res = A + (B–A) * alpha
+//    COLORREF c1 = (a & 0xFF)     + ((alpha * ((b & 0xFF) - (a & 0xFF))) >> 8);
+//    COLORREF c2 = 0;//  (a & 0xFF00) + ((alpha * ((b & 0xFF00) - (a & 0xFF00))) >> 8);
+//    COLORREF c3 = 0;// (a & 0xFF0000) + ((alpha * ((b & 0xFF0000) - (a & 0xFF0000))) >> 8);
+//    COLORREF res = (c1 & 0xFF) | (c2 & 0xFF00) | (c3 & 0xFF0000);
+//    return res;
+//}
 
 inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
 {
@@ -29,7 +47,6 @@ inline COLORREF blendAlpha(COLORREF colora, COLORREF colorb, DWORD alpha)
     COLORREF g2 = alpha * (colorb & 0x00FF00);
     return (((rb1 + rb2) >> 8) & 0xFF00FF) + (((g1 + g2) >> 8) & 0x00FF00);
 }
-
 
 #ifdef DEBUG
 void DebugPrint(const TCHAR* fmt, ...)
@@ -148,7 +165,8 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
                     DWORD alpha = (DWORD)(255.0 * (mu - index));
                     if (alpha > 255)
                         alpha = 255;
-                    *(pDibPixel++) = blendAlpha(c1, c2, alpha);
+                    COLORREF res = blendAlpha(c1, c2, alpha);
+                    *(pDibPixel++) = res;
                 }
             }
         }
@@ -219,7 +237,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
         }
     }
 
-#ifndef DEEP_DEBUG
+#ifndef DISABLE_OMP
 #pragma omp parallel for
 #endif
     for (int l = 0; l < height; ++l) {
@@ -280,12 +298,12 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
 
     bool isJulia = cr || ci ;
 
-#ifndef DEEP_DEBUG
+#ifndef DISABLE_OMP
 #pragma omp parallel for
 #endif
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
-        fixed_8_120_t usq = 0, vsq = 0, u = 0, v = 0, x, tmp = 0, uv, modulus;
+        fixed_8_120_t usq, vsq, u, v, x, tmp, uv, modulus;
         fixed_8_120_t xc = (isJulia) ? cr : 0; // no need to do this per pixel for Julia
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
@@ -368,7 +386,9 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
 
     bool isJulia = cr != 0 || ci != 0;
 
+#ifndef DISABLE_OMP
 #pragma omp parallel for
+#endif
     for (int l = 0; l < height; ++l) {
         double y = y0 + (dy * l);
         double usq = 0, vsq = 0, u = 0, v = 0;
@@ -459,7 +479,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         m_NeedToRedraw = true;
     }
 
-    fixed_8_120_t dx((m_xmax - m_xmin) * fixed_8_120_t(1.0 / (double)width)), dy = dx;
+    fixed_8_120_t dx = (m_xmax - m_xmin) * (1.0 / width), dy = dx;
 
     if (m_NeedToRedraw) {
         LARGE_INTEGER time_start, time_end;
@@ -504,10 +524,19 @@ void CMandelbrotView::OnDraw(CDC* pDC)
 */
 void CMandelbrotView::SetDefaultValues()
 {
+#ifdef INITIAL_POINT
+    m_xmin = x_init[0];
+    m_xmax = x_init[1];
+    m_ymin = y_init[0];
+    m_ymax = y_init[1];
+    m_zoom = zoom_init;
+#else
     m_xmax = 2.5;
     m_xmin = -m_xmax;
     m_ymax = m_ymin = 0;
     m_zoom = 1;
+#endif
+
     SetAspectRatio();
 }
 
@@ -524,7 +553,7 @@ void CMandelbrotView::SetAspectRatio()
     if (0 == rect.Height())
         return;
 
-    fixed_8_120_t ratio = (double)(rect.Height()) / (double)(rect.Width());
+    fixed_8_120_t ratio = (double)rect.Height() / rect.Width();
     fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
     m_ymin = ((m_ymax + m_ymin) >> 1) - ysize;
     m_ymax = m_ymin + (ysize << 1);
@@ -560,9 +589,10 @@ void CMandelbrotView::OnZoomChange(CPoint& point, double zoomMultiplier)
     GetClientRect(&rect);
     static fixed_8_120_t one = 1;
 
+    DebugPrint(L"OnZoomChange: Zoom level: %0.10lf\n", (double)m_zoom);
     //fix y coords
-    fixed_8_120_t alpha = 1.0 - (double)(point.y) / (double)rect.bottom;
-    fixed_8_120_t quarter = (m_ymax - m_ymin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
+    fixed_8_120_t alpha = 1.0 - (double)(point.y) / rect.bottom;
+    fixed_8_120_t quarter = (m_ymax - m_ymin) * (1.0 / (zoomMultiplier * 2.0));
     fixed_8_120_t center = alpha * m_ymax + (one - alpha) * m_ymin;
     DebugPrint(L"OnZoomChange: Y calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
 
@@ -571,13 +601,13 @@ void CMandelbrotView::OnZoomChange(CPoint& point, double zoomMultiplier)
 
     //fix x coords
     alpha = (double)(point.x) / (double)rect.right;
-    quarter = (m_xmax - m_xmin) * fixed_8_120_t(1.0 / (zoomMultiplier * 2.0));
+    quarter = (m_xmax - m_xmin) * (1.0 / (zoomMultiplier * 2.0));
     center = alpha * m_xmax + (one - alpha) * m_xmin;
     m_xmin = center - quarter;
     m_xmax = center + quarter;
 
     DebugPrint(L"OnZoomChange: X calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
-    DebugPrint(L"OnZoomChange coords: \n\tX: %0.10lf : %0.10lf \n\tY: %0.10lf : %0.10lf\n", (double)m_xmin, (double)m_xmax, (double)m_ymin, (double)m_ymax);
+    DebugPrint(L"OnZoomChange coords: \n\tX: {%0.10lf, %0.10lf} \n\tY: {%0.10lf, %0.10lf}\n", (double)m_xmin, (double)m_xmax, (double)m_ymin, (double)m_ymax);
 
     m_NeedToRedraw = true;
     Invalidate(FALSE);
@@ -616,7 +646,6 @@ void CMandelbrotView::OnRButtonDown(UINT nFlags, CPoint point)
     }
 
     m_zoom *= zoomMultiplier;
-
     OnZoomChange(point, zoomMultiplier);
 }
 
@@ -807,7 +836,7 @@ void CMandelbrotView::OnFileSaveImage()
     COLORREF* pBits = (COLORREF*)image.GetPixelAddress(0, 0);
     float* pIterations = new float[width * height];
     fixed_8_120_t dx = (m_xmax - m_xmin) * (1.0 / width);
-    fixed_8_120_t ratio = (double)(height) / (double)(width);
+    fixed_8_120_t ratio = (double)(height) / width;
     fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
     fixed_8_120_t ymax = ((m_ymax + m_ymin) >> 1) + ysize;
     fixed_8_120_t cr = 0, ci = 0;
