@@ -154,7 +154,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
                     continue;
                 }
 
-                DWORD index = (DWORD)floor(mu);
+                int index = (int)floor(mu);
 
                 if (index < 1) {
                     *(pDibPixel++) = m_ColorTable32[1];
@@ -435,7 +435,8 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
                 modulus = vsq + usq;
             } 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
+                float mu = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
+                *(pbuff++) = max(mu, 1);
             }
             else {
                 *(pbuff++) = (float)max(iter, 1);

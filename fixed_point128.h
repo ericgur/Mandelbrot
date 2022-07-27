@@ -2,6 +2,7 @@
 #define FIXED_POINT128_H
 
 #include <intrin.h>
+#include <string>
 #include <exception>
 #include <stdexcept>
 
@@ -11,9 +12,6 @@ typedef int int32;
 typedef unsigned int uint32;
 typedef short int16;
 typedef unsigned short uint16;
-
-int div_short(unsigned short* q, unsigned short* r, const unsigned short* u, const unsigned short* v, int m, int n);
-int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m, int64 n);
 
 #ifndef ONE_SHIFT
 #define ONE_SHIFT(x)  (1ull << (x))
@@ -39,9 +37,19 @@ int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m, i
 #define FLOAT_DIVIDE_BY_ZERO_EXCEPTION throw std::logic_error("Floating point divide by zero!")
 #endif
 
-#define USE32BIT_DIVISION
+#ifndef NOT_IMPLEMENTED_EXCEPTION 
+#define NOT_IMPLEMENTED_EXCEPTION throw std::exception("Not implemented!")
+#endif
 
-template<int int_bits>
+namespace fp128 {
+    
+// Forward declarations
+inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m, int64 n);
+template<int int_bits> class fixed_point128;
+template<int int_bits> inline fixed_point128<int_bits> abs(const fixed_point128<int_bits>& other) noexcept;
+
+// Main fixed point type template
+template<int int_bits = 16>
 class fixed_point128
 {
     static_assert(1 <= int_bits && int_bits <= 64, "Template parameter <int_bits> must be in the [1,64] range!");
@@ -60,19 +68,21 @@ private:
     static inline const double lower_unity = pow(2, -frac_bits);
     static constexpr unsigned max_dword_value = (unsigned)(-1);
     static constexpr uint64 max_qword_value = (uint64)(-1);
+    static constexpr int dbl_exp_bits = 11;
+    static constexpr int dbl_frac_bits = 52;
 public:
     // ctors
-    fixed_point128() { 
+    fixed_point128() noexcept { 
         low = high = 0ull; sign = 0; 
     }
 
-    fixed_point128(const fixed_point128& other) {
+    fixed_point128(const fixed_point128& other) noexcept {
         low = other.low;
         high = other.high;
         sign = other.sign;
     }
 
-    fixed_point128(double val) {
+    fixed_point128(double val) noexcept {
         uint64 i = *((uint64*)(&val));
         // very common case
         if (i == 0) {
@@ -82,8 +92,8 @@ public:
         }
 
         sign = GET_BIT(i, 63);
-        int e = GET_BITS(i, 52, 11) - 1023;
-        uint64 f = (i & MAX_BITS_VALUE_64(52));
+        int e = GET_BITS(i, dbl_frac_bits, dbl_exp_bits) - 1023;
+        uint64 f = (i & MAX_BITS_VALUE_64(dbl_frac_bits));
         
         // overflow which catches NaN and Inf
         if (e >= int_bits) {
@@ -92,11 +102,11 @@ public:
             return;
         }
 
-        // normal number
-        if (e > -1023) {
+        // normal number, smaller exponents underflow silently to zero
+        if (e >= -frac_bits) {
             // bit 52 in f is the unity value of the float. it needs to move to the unity position in fixed point
-            f |= ONE_SHIFT(52);
-            int bits_to_shift = 64 - int_bits - 52 + e;
+            f |= ONE_SHIFT(dbl_frac_bits);
+            int bits_to_shift = 64 - int_bits - dbl_frac_bits + e;
 
             // f fits in high QWORD
             if (bits_to_shift >= 0) {
@@ -110,46 +120,46 @@ public:
                 if (bits_to_shift <= 53) {
                     high = f >> bits_to_shift;
                     low = GET_BITS(f, 0, bits_to_shift);
-                    low <<= (int64)(64 - bits_to_shift);
+                    low <<= 64ll - bits_to_shift;
                 }
                 // shift f into low QWORD
                 else {
                     high = 0;
-                    bits_to_shift -= 52;
-                    f <<= (63 - 52);
+                    bits_to_shift -= dbl_frac_bits;
+                    f <<= 63 - dbl_frac_bits;
                     low = f >> bits_to_shift;
                 }
             }
         }
-        // too small, no need to bother.
+        // too small to be represented, no need to bother.
         else {
             high = low = 0;
             sign = 0;
         }
     }
 
-    fixed_point128(uint64 val) {
+    fixed_point128(uint64 val) noexcept {
         low = 0;
         sign = 0;
         high = val << upper_frac_bits;
     }
 
-    fixed_point128(int64 val) {
+    fixed_point128(int64 val) noexcept {
         low = 0;
         sign = GET_BIT(val, 63);
-        high = ((sign != 0) ? (-val) : val) << upper_frac_bits;
+        high = ((sign != 0) ? -val : val) << upper_frac_bits;
     }
 
-    fixed_point128(unsigned val) {
+    fixed_point128(unsigned val) noexcept {
         low = 0;
         sign = 0;
         high = (uint64)val << upper_frac_bits;
     }
 
-    fixed_point128(int val) {
+    fixed_point128(int val) noexcept {
         low = 0;
         sign = GET_BIT(val, 31);
-        high = (uint64)((sign != 0) ? (-val) : val) << upper_frac_bits;
+        high = (uint64)((sign != 0) ? -val : val) << upper_frac_bits;
     }
 
     // assignment operators
@@ -161,30 +171,37 @@ public:
     }
 
     // conversion operators
-    inline operator uint64() const {
+    inline operator uint64() const noexcept {
         return (high >> upper_frac_bits) & max_qword_value;
     }
 
-    inline operator int64() const {
+    inline operator int64() const noexcept {
         int64 res = (sign) ? -1ll : 1ll;
         return res * ((high >> upper_frac_bits) & max_qword_value);
     }
 
-    inline operator uint32() const {
+    inline operator uint32() const noexcept {
         return (high >> upper_frac_bits) & max_dword_value;
     }
 
-    inline operator int32() const {
+    inline operator int32() const noexcept {
         int res = (sign) ? -1 : 1;
         return res * ((int)((int64)high >> upper_frac_bits) & (max_dword_value));
     }
 
-    inline operator double() const {
+    inline operator double() const noexcept {
         double res = (double)(high * upper_unity); // bits [64:127]
         res += (double)(low * lower_unity);        // bits [0:63]
         return (sign) ? -res : res;
     }
-    
+
+    inline operator std::string() const {
+        char str[256];
+        snprintf(str, sizeof(str), "%0.40lf", (double)*this);
+        std::string res = str;
+        return res;
+    }
+
     // math operators
     inline fixed_point128 operator+(const fixed_point128& other) const {
         fixed_point128 temp(*this);
@@ -220,11 +237,19 @@ public:
         fixed_point128 temp(*this);
         return temp /= other;
     }
+
     inline fixed_point128 operator/(double val) const {
-        if (val == 0) FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
+        if (val == 0)
+            FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
+
         fixed_point128 temp(*this);
         temp /= val;
         return temp;
+    }
+
+    inline fixed_point128 operator%(const fixed_point128& other) const {
+        fixed_point128 temp(*this);
+        return temp %= other;
     }
 
     inline fixed_point128 operator>>(int shift) const {
@@ -247,6 +272,11 @@ public:
         return temp |= other;
     }
 
+    inline fixed_point128 operator^(const fixed_point128& other) const {
+        fixed_point128 temp(*this);
+        return temp ^= other;
+    }
+
     inline fixed_point128& operator+=(const fixed_point128& other) {
         unsigned char carry;
         // different sign: convert other to negative and use operator -=
@@ -260,6 +290,9 @@ public:
         // equal sign: simple case
         carry = _addcarry_u64(0, low, other.low, &low);
         _addcarry_u64(carry, high, other.high, &high);
+        
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -289,6 +322,8 @@ public:
             high = ~high + carry;
         }
         
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -331,6 +366,8 @@ public:
 
         // set the sign
         sign ^= other.sign;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -346,6 +383,8 @@ public:
         // multiply low QWORDs
         low = _umul128(low, uval, &temp);
         high = high * uval + temp;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -355,6 +394,8 @@ public:
         // multiply low QWORDs
         low = _umul128(low, val, &temp);
         high = high * val + temp;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -370,6 +411,8 @@ public:
         // multiply low QWORDs
         low = _umul128(low, uval, &temp);
         high = high * uval + temp;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -379,6 +422,8 @@ public:
         // multiply low QWORDs
         low = _umul128(low, val, &temp);
         high = high * val + temp;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -386,15 +431,13 @@ public:
         uint64 nom[4] = {0, 0, low, high};
         uint64 denom[2] = {other.low, other.high};
         uint64 q[4] = {0}, r = NULL; // don't need the reminder
-    #ifdef USE32BIT_DIVISION
         if (0 == div_32bit((uint32*)q, (uint32*)r, (uint32*)nom, (uint32*)denom, sizeof(nom) / sizeof(uint32), sizeof(denom) / sizeof(uint32))) {
-    #else
-        if (0 == div_short((unsigned short*)q, (unsigned short*)r, (unsigned short*)nom, (unsigned short*)denom, sizeof(nom) / sizeof(short), sizeof(denom) / sizeof(short))) {
-    #endif
             // result in q needs to shift left by frac_bits
             high = (q[2] << upper_frac_bits) | (q[1] >> int_bits);
             low  = (q[1] << upper_frac_bits) | (q[0] >> int_bits);
             sign ^= other.sign;
+            // set sign to 0 when both low and high are zero (avoid having negative zero value)
+            sign &= (0 != low || 0 != high);
         }
         else { // error
             INT_DIVIDE_BY_ZERO_EXCEPTION;
@@ -407,15 +450,39 @@ public:
         // infinity
         if (0 == i) FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
 
-        uint64 f = (i & MAX_BITS_VALUE_64(52));
+        uint64 f = (i & MAX_BITS_VALUE_64(dbl_frac_bits));
         // simple and common case, the value is an exponent of 2
         if (0 == f) {
             sign ^= int(i >> 63);
-            int e = GET_BITS(i, 52, 11) - 1023;
+            int e = GET_BITS(i, dbl_frac_bits, dbl_exp_bits) - 1023;
             return (e >= 0) ? *this >>= e  : *this <<= e;
         }
 
         *this /= fixed_point128(val);
+        return *this;
+    }
+
+    inline fixed_point128& operator%=(const fixed_point128& other) {
+        uint64 nom[4] = {0, 0, low, high};
+        uint64 denom[2] = {other.low, other.high};
+        uint64 q[4] = {0}, r[4] = {0};
+        
+        //do the division in with positive numbers
+        if (0 == div_32bit((uint32*)q, (uint32*)r, (uint32*)nom, (uint32*)denom, sizeof(nom) / sizeof(uint32), sizeof(denom) / sizeof(uint32))) {
+            // result is in r (remainder) needs to shift left by frac_bits
+            low = r[0];
+            high = r[1];
+            if (sign != other.sign) {
+                // the remainder + denominator
+                *this += other;
+            }
+            // Note if signs are the same, for nom/denom, the result keeps the sign.
+            // set sign to 0 when both low and high are zero (avoid having negative zero value)
+            sign &= (0 != low || 0 != high);
+        }
+        else { // error
+            INT_DIVIDE_BY_ZERO_EXCEPTION;
+        }
         return *this;
     }
 
@@ -427,13 +494,13 @@ public:
         }
         else if (shift >= 128) {
             low = high = 0;
-            sign = 0;
         }
         else if (shift >= 64) {
             low = high >> (shift - 64);
             high = 0;
         }
-
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -448,9 +515,9 @@ public:
         }
         else {
             low = high = 0;
-            sign = 0;
         }
-
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -458,8 +525,11 @@ public:
         low &= other.low;
         high &= other.high;
         sign &= other.sign;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
+
     inline fixed_point128& operator|=(const fixed_point128& other) {
         low |= other.low;
         high |= other.high;
@@ -467,9 +537,17 @@ public:
         return *this;
     }
 
+    inline fixed_point128& operator^=(const fixed_point128& other) {
+        low ^= other.low;
+        high ^= other.high;
+        sign ^= other.sign;
+    }
+
     // prefix ++ operation
     inline fixed_point128& operator++() {
         high += unity;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -488,6 +566,8 @@ public:
             high = 0;
             --low;
         }
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
 
@@ -514,6 +594,8 @@ public:
         fixed_point128 temp(*this);
         temp.high = ~high;
         temp.low = ~low;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        temp.sign &= (0 != low || 0 != high);
         return temp;
     }
     // unary +
@@ -524,7 +606,10 @@ public:
     // unary -
     inline fixed_point128 operator-() const {
         fixed_point128 temp(*this);
+
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
         temp.sign ^= 1;
+        temp.sign &= (0 != low || 0 != high);
         return temp;
     }
 
@@ -534,9 +619,11 @@ public:
     inline bool operator==(const fixed_point128& other) const {
         return sign == sign && high == high && low == low;
     }
+
     inline bool operator!=(const fixed_point128& other) const {
         return sign != sign || high != high || low != low;
     }
+
     inline bool operator<(const fixed_point128& other) const {
         // signs are different
         if (sign != other.sign)
@@ -582,25 +669,32 @@ public:
         return (sign) ? high <= other.high : high >= other.high;
     }
 
-};
+    friend fixed_point128<int_bits> fp128::abs(const fixed_point128<int_bits>&) noexcept;
 
+private:
+};
 
 inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m, int64 n)
 {
     const uint64 b = 1ull << 32; // Number base (32 bits).
     const uint64 mask = b - 1;
     uint32* un, * vn;            // Normalized form of u, v.
-    uint64 qhat;               // Estimated quotient digit.
-    uint64 rhat;               // A remainder.
-    uint64 p;                  // Product of two digits.
+    uint64 qhat;                 // Estimated quotient digit.
+    uint64 rhat;                 // A remainder.
+    uint64 p;                    // Product of two digits.
     int64 s, s_comp, i, j, t, k;
+    // shrink the arrays to avoid extra work on small numbers
+    while (m >= 0 && u[m - 1] == 0) --m;
+    while (n >= 0 && v[n - 1] == 0) --n;
+
     if (m < n || n <= 0 || v[n - 1] == 0)
         return 1; // Return if invalid param.
 
-    if (n == 1) {                           // Take care of 
-        k = 0;                              // the case of a 
-        for (j = m - 1; j >= 0; j--) {      // single-digit 
-            q[j] = (uint32)((k * b + u[j]) / v[0]);   // divisor here. 
+    // Take care of the case of a single-digit divisor here.
+    if (n == 1) {
+        k = 0;
+        for (j = m - 1; j >= 0; j--) {
+            q[j] = (uint32)((k * b + u[j]) / v[0]);
             k = (k * b + u[j]) - (uint64)q[j] * v[0];
         }
 
@@ -622,20 +716,21 @@ inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int
     vn[0] = v[0] << s;
     un = (uint32*)_malloca(sizeof(uint32) * (m + 1));
     if (NULL == un) return 1;
+
     un[m] = u[m - 1] >> s_comp;
     for (i = m - 1; i > 0; i--)
         un[i] = (u[i] << s) | (u[i - 1] >> s_comp);
+
     un[0] = u[0] << s;
     for (j = m - n; j >= 0; j--) { // Main loop. 
                                    // Compute estimate qhat of q[j]. 
         qhat = ((uint64)un[j + n] * b + (uint64)un[j + n - 1]) / (uint64)vn[n - 1];
         rhat = ((uint64)un[j + n] * b + (uint64)un[j + n - 1]) - qhat * (uint64)vn[n - 1];
-    again:
-        if (qhat >= b || qhat * (uint64)vn[n - 2] > b * rhat + (uint64)un[j + n - 2]) {
+        while (qhat >= b || qhat * (uint64)vn[n - 2] > b * rhat + (uint64)un[j + n - 2]) {
             qhat = qhat - 1;
             rhat = rhat + (uint64)vn[n - 1];
-            if (rhat < b)
-                goto again;
+            if (rhat >= b)
+                break;
         }
         // Multiply and subtract. 
         k = 0;
@@ -648,9 +743,8 @@ inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int
 
         t = (uint64)un[j + n] - k; un[j + n] = (uint32)t;
         q[j] = (uint32)qhat;    // Store quotient digit. 
-        if (t < 0) {                    // If we subtracted too
-
-            q[j] = q[j] - 1; // much, add back. 
+        if (t < 0) {            // If we subtracted too
+            q[j] = q[j] - 1;    // much, add back. 
             k = 0;
             for (i = 0; i < n; i++) {
                 t = (uint64)un[i + j] + vn[i] + k;
@@ -663,98 +757,22 @@ inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int
       // If the caller wants the remainder, unnormalize 
       // it and pass it back. 
     if (r != NULL) {
-        for (i = 0; i < n; i++)
-            r[i] = (un[i] >> s) | (un[i + 1] << s_comp);
-
-    }
-    return 0;
-}
-
-inline int div_short(unsigned short* q, unsigned short* r, const unsigned short* u, const unsigned short* v, int m, int n)
-{
-    const unsigned b = 65536; // Number base (16 bits).
-    const unsigned mask = b - 1;
-    unsigned short* un, * vn;  // Normalized form of u, v.
-    unsigned qhat;            // Estimated quotient digit.
-    unsigned rhat;            // A remainder.
-    unsigned p;               // Product of two digits.
-    int s, i, j, t, k;
-    if (m < n || n <= 0 || v[n - 1] == 0)
-        return 1; // Return if invalid param.
-
-    if (n == 1) {                           // Take care of 
-        k = 0;                              // the case of a 
-        for (j = m - 1; j >= 0; j--) {      // single-digit 
-            q[j] = (unsigned short)((k * b + u[j]) / v[0]);   // divisor here. 
-            k = (k * b + u[j]) - q[j] * v[0];
-        }
-
-        if (r != NULL)
-            r[0] = (unsigned short)k;
-        return 0;
-    }
-    // Normalize by shifting v left just enough so that 
-    // its high-order bit is on, and shift u left the 
-    // same amount. We may have to append a high-order 
-    // digit on the dividend; we do that unconditionally.
-    s = __lzcnt16(v[n - 1]); // -16; // 0 <= s <= 16. 
-    vn = (unsigned short*)_malloca(2 * n);
-    if (NULL == vn)
-        return 1;
-
-    for (i = n - 1; i > 0; i--)
-        vn[i] = (unsigned short)(v[i] << s) | (v[i - 1] >> (16 - s));
-    vn[0] = v[0] << s;
-    un = (unsigned short*)_malloca(2 * (m + 1));
-    if (NULL == un)
-        return 1;
-
-    un[m] = u[m - 1] >> (16 - s);
-    for (i = m - 1; i > 0; i--)
-        un[i] = (u[i] << s) | (u[i - 1] >> (16 - s));
-    un[0] = u[0] << s;
-    for (j = m - n; j >= 0; j--) { // Main loop. 
-                                   // Compute estimate qhat of q[j]. 
-        qhat = (un[j + n] * b + un[j + n - 1]) / vn[n - 1];
-        rhat = (un[j + n] * b + un[j + n - 1]) - qhat * vn[n - 1];
-    again:
-        if (qhat >= b || qhat * vn[n - 2] > b * rhat + un[j + n - 2]) {
-            qhat = qhat - 1;
-            rhat = rhat + vn[n - 1];
-            if (rhat < b)
-                goto again;
-        }
-        // Multiply and subtract. 
-        k = 0;
         for (i = 0; i < n; i++) {
-            p = qhat * vn[i];
-            t = un[i + j] - k - (p & mask);
-            un[i + j] = (unsigned short)t;
-            k = (p >> 16) - (t >> 16);
+            r[i] = (un[i] >> s) | (un[i + 1] << s_comp);
         }
-
-        t = un[j + n] - k; un[j + n] = (unsigned short)t;
-        q[j] = (unsigned short)qhat;    // Store quotient digit. 
-        if (t < 0) {                    // If we subtracted too
-
-            q[j] = q[j] - 1; // much, add back. 
-            k = 0;
-            for (i = 0; i < n; i++) {
-                t = un[i + j] + vn[i] + k;
-                un[i + j] = (unsigned short)t;
-                k = t >> 16;
-            }
-            un[j + n] = (unsigned short)(un[j + n] + k);
-        }
-    } // End j.
-      // If the caller wants the remainder, unnormalize 
-      // it and pass it back. 
-    if (r != NULL) {
-        for (i = 0; i < n; i++)
-            r[i] = (un[i] >> s) | (un[i + 1] << (16 - s));
 
     }
     return 0;
 }
 
+
+template<int int_bits>
+inline fixed_point128<int_bits> abs(const fixed_point128<int_bits>& other) noexcept
+{
+    fixed_point128 temp = other;
+    temp.sign = 0;
+    return temp;
+}
+
+}
 #endif // #ifndef FIXED_POINT128_H

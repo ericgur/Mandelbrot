@@ -2,6 +2,7 @@
 //
 
 #include "fixed_point128.h"
+using namespace fp128;
 
 typedef fixed_point128<8> fixed_8_120_t;
 
