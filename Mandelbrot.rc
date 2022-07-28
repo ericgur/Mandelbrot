@@ -255,16 +255,18 @@ END
 // Dialog
 //
 
-IDD_ABOUTBOX DIALOGEX 0, 0, 179, 89
+IDD_ABOUTBOX DIALOGEX 0, 0, 263, 119
 STYLE DS_SETFONT | DS_MODALFRAME | DS_FIXEDSYS | WS_POPUP | WS_CAPTION | WS_SYSMENU
 CAPTION "About Mandelbrot"
 FONT 8, "MS Shell Dlg", 0, 0, 0x1
 BEGIN
     ICON            IDR_MAINFRAME,IDC_STATIC,14,14,21,20
-    LTEXT           "Mandelbrot, Version 1.1",IDC_STATIC,42,14,114,8,SS_NOPREFIX
-    LTEXT           "Copyright (C) 2022",IDC_STATIC,42,45,114,8
-    DEFPUSHBUTTON   "OK",IDOK,122,68,50,14,WS_GROUP
-    LTEXT           "By Eric Gur",IDC_STATIC,41,29,114,8,SS_NOPREFIX
+    LTEXT           "Mandelbrot, Version 1.1",IDC_STATIC,53,14,114,8,SS_NOPREFIX
+    LTEXT           "Copyright (C) 2022",IDC_STATIC,53,45,81,8
+    DEFPUSHBUTTON   "OK",IDOK,107,98,50,14,WS_GROUP
+    LTEXT           "By Eric Gur",IDC_STATIC,53,29,114,8,SS_NOPREFIX
+    LTEXT           "Left mouse click to zoom in, right click to zoom out, middle click to reset.",IDC_STATIC,7,64,249,8
+    LTEXT           "Use Shift and CTRL+Shift to zoom faster",IDC_STATIC,7,76,249,8
 END
 
 IDD_COMPLEX_SELECT DIALOGEX 0, 0, 199, 185
@@ -289,8 +291,8 @@ END
 //
 
 VS_VERSION_INFO VERSIONINFO
- FILEVERSION 1,0,0,1
- PRODUCTVERSION 1,0,0,1
+ FILEVERSION 1,2,0,0
+ PRODUCTVERSION 1,2,0,0
  FILEFLAGSMASK 0x3fL
 #ifdef _DEBUG
  FILEFLAGS 0x1L
@@ -303,16 +305,16 @@ VS_VERSION_INFO VERSIONINFO
 BEGIN
     BLOCK "StringFileInfo"
     BEGIN
-        BLOCK "040904B0"
+        BLOCK "040904b0"
         BEGIN
             VALUE "CompanyName", "Eric Gur"
             VALUE "FileDescription", "Mandelbrot"
-            VALUE "FileVersion", "1.1.0.0"
+            VALUE "FileVersion", "1.2.0.0"
             VALUE "InternalName", "Mandelbrot.exe"
             VALUE "LegalCopyright", "(c) Eric Gur.  All rights reserved."
             VALUE "OriginalFilename", "Mandelbrot.exe"
             VALUE "ProductName", "Mandelbrot MFC App"
-            VALUE "ProductVersion", "1.1.0.0"
+            VALUE "ProductVersion", "1.2.0.0"
         END
     END
     BLOCK "VarFileInfo"
@@ -333,9 +335,9 @@ BEGIN
     IDD_ABOUTBOX, DIALOG
     BEGIN
         LEFTMARGIN, 7
-        RIGHTMARGIN, 172
+        RIGHTMARGIN, 256
         TOPMARGIN, 7
-        BOTTOMMARGIN, 82
+        BOTTOMMARGIN, 112
     END
 
     IDD_COMPLEX_SELECT, DIALOG
