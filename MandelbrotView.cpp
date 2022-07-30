@@ -453,11 +453,9 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
 */
 void CMandelbrotView::OnDraw(CDC* pDC)
 {
-    SetAspectRatio();
-
     CString title;
-
     CRect rect;
+    SetAspectRatio();
     GetClientRect(rect);
     const int width = rect.Width(), height = rect.Height();
 
