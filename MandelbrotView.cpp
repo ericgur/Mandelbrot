@@ -95,13 +95,13 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_WM_RBUTTONDOWN()
     ON_WM_MBUTTONDOWN()
     ON_WM_CREATE()
-    ON_COMMAND(ID_VIEW_GREYSCALE, OnGreyScale)
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
     ON_COMMAND(ID_VIEW_RESETVIEW, &CMandelbrotView::OnResetView)
-    ON_COMMAND(ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnHistogramColoring)
+    ON_COMMAND_RANGE(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnPaletteChange)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
+    ON_COMMAND(ID_VIEW_SMOOTHCOLORTRANSITION, &CMandelbrotView::OnSmoothColorTransitions)
 END_MESSAGE_MAP()
 
 
@@ -112,7 +112,6 @@ CMandelbrotView::CMandelbrotView()
 {
     m_MaxIter = 128;
     m_SmoothLevel = true;
-    m_HistogramColoring = false;
     m_ColorTable32 = nullptr;
     m_BmpBits = nullptr;
     m_Iterations = nullptr;
@@ -131,7 +130,7 @@ CMandelbrotView::CMandelbrotView()
     m_BmpInfo.bmiHeader.biYPelsPerMeter = 100;
 
     //init color table
-    m_GreyScale = false;
+    m_PaletteType = palGradient;
     CreateColorTables();
     m_NeedToRedraw = true;
 
@@ -165,7 +164,7 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 
 void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
 {
-    if (!m_HistogramColoring) {
+    if (m_PaletteType != palHistogram) {
         for (int l = 0; l < height; ++l) {
             //point to start of buffer
             COLORREF* pDibPixel = pBits + width * l;
@@ -698,7 +697,8 @@ void CMandelbrotView::OnResetView()
 }
 
 /**
- * @brief Creates iteration to color mapping depending on the max iteration count
+ * @brief Creates iteration to color mapping depending on the max iteration count and user selected palette type
+ *        Histogram coloring is calculated on the fly
 */
 void CMandelbrotView::CreateColorTables()
 {
@@ -706,13 +706,41 @@ void CMandelbrotView::CreateColorTables()
         delete[] m_ColorTable32;
 
     m_ColorTable32 = new COLORREF[m_MaxIter + 2];
-    if (m_GreyScale) {
+    if (m_PaletteType == palGrey) {
         for (size_t i = 1; i <= m_MaxIter; ++i) {
             int c = 255 - (int)(255.0f * (float)i / (float)m_MaxIter);
             m_ColorTable32[i] = RGB(c, c, c);
         }
     }
-    else {
+    else if (m_PaletteType == palVivid) {
+        float step = 6 * (m_MaxIter <= 256) ? (13.0f / 256.f) : (13.0f / 256.f);
+        for (int i = 0; i <= m_MaxIter; ++i) {
+            float h = step * i;
+            float x = (1.0f - abs(fmodf(h, 2) - 1.0f));
+            switch ((int)floorf(h) % 6) {
+            case 0: // 0-60 
+                m_ColorTable32[i] = RGB(255, int(x * 255), 0);
+                break;
+            case 1: // 60-120
+                m_ColorTable32[i] = RGB(int(x * 255), 255, 0);
+                break;
+            case 2: // 120-180 
+                m_ColorTable32[i] = RGB(0, 255, int(x * 255));
+                break;
+            case 3: // 180-240
+                m_ColorTable32[i] = RGB(0, int(x * 255), 255);
+                break;
+            case 4: // 240-300
+                m_ColorTable32[i] = RGB(int(x * 255), 0, 255);
+                break;
+            case 5: // 300-360
+                m_ColorTable32[i] = RGB(255, 0, int(x * 255));
+                break;
+            }
+        }
+    }
+    else if (m_PaletteType == palGradient) {
+        DWORD r = 4, g = 6, b = 190;
         for (size_t i = 1; i <= m_MaxIter; ++i) {
             size_t c = m_MaxIter - i;
             m_ColorTable32[i] = RGB(c * 4 & 255, c * 6 & 255, c * 3 & 255);
@@ -734,7 +762,10 @@ int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
     return 0;
 }
 
-
+/**
+ * @brief - callback when user selects Mandelbrot or Julia sets
+ * @param nID - resource ID of the menu item
+*/
 void CMandelbrotView::OnSetTypeSelect(UINT nID)
 {
     set_type_t set_type = stMandelbrot;
@@ -788,41 +819,26 @@ void CMandelbrotView::OnIterationChange(UINT nID)
 }
 
 
-void CMandelbrotView::OnHistogramColoring()
+void CMandelbrotView::OnPaletteChange(UINT nID)
 {
+    if (nID < ID_VIEW_GREYSCALE || nID > ID_VIEW_HISTOGRAMCOLORING) {
+        CString str;
+        str.Format(L"OnPaletteChange: Invalid nID received as argument: %d\n", nID);
+        OutputDebugString(str);
+    }
+
     CMenu* menu = AfxGetMainWnd()->GetMenu();
-    int state = menu->GetMenuState(ID_VIEW_HISTOGRAMCOLORING, MF_BYCOMMAND);
-
-    if (state & MF_CHECKED) {
-        menu->CheckMenuItem(ID_VIEW_HISTOGRAMCOLORING, MF_UNCHECKED | MF_BYCOMMAND);
-        m_HistogramColoring = false;
-    }
-    else {
-        menu->CheckMenuItem(ID_VIEW_HISTOGRAMCOLORING, MF_CHECKED | MF_BYCOMMAND);
-        m_HistogramColoring = true;
-    }
-
-    CreateColorTables();
-    m_NeedToRedraw = true;
-    Invalidate(FALSE);
-}
-
-/**
- * @brief Callback for the ID_VIEW_GREYSCALE command. Toggles between grey and color images.
-*/
-void CMandelbrotView::OnGreyScale()
-{
-    CMenu* menu = AfxGetMainWnd()->GetMenu();
-
-    int state = menu->GetMenuState(ID_VIEW_GREYSCALE, MF_BYCOMMAND);
-
-    if (state & MF_CHECKED) {
-        menu->CheckMenuItem(ID_VIEW_GREYSCALE, MF_UNCHECKED | MF_BYCOMMAND);
-        m_GreyScale = false;
-    }
-    else {
-        menu->CheckMenuItem(ID_VIEW_GREYSCALE, MF_CHECKED | MF_BYCOMMAND);
-        m_GreyScale = true;
+    CString value;
+    menu->CheckMenuRadioItem(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, nID, MF_BYCOMMAND);
+    switch (nID) {
+    case ID_VIEW_GREYSCALE:
+        m_PaletteType = palGrey; break;
+    case ID_VIEW_VIVIDCOLORS:
+        m_PaletteType = palVivid; break;
+    case ID_VIEW_GRADIENTS:
+        m_PaletteType = palGradient; break;
+    case ID_VIEW_HISTOGRAMCOLORING:
+        m_PaletteType = palHistogram; break;
     }
 
     CreateColorTables();
@@ -898,6 +914,28 @@ void CMandelbrotView::OnSetTypeChooseJuliaConstant()
     
     m_JuliaCr = _ttof(dlg.real);
     m_JuliaCi = _ttof(dlg.imag);
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
+}
+
+
+/**
+ * @brief Callback for ID_VIEW_SMOOTHCOLORTRANSITION, select linear interpolation of colors.
+*/
+void CMandelbrotView::OnSmoothColorTransitions()
+{
+    CMenu* menu = AfxGetMainWnd()->GetMenu();
+    UINT state = menu->GetMenuState(ID_VIEW_SMOOTHCOLORTRANSITION, MF_BYCOMMAND);
+
+    if (state & MF_CHECKED) {
+        menu->CheckMenuItem(ID_VIEW_SMOOTHCOLORTRANSITION, MF_UNCHECKED | MF_BYCOMMAND);
+        m_SmoothLevel = false;
+    }
+    else {
+        menu->CheckMenuItem(ID_VIEW_SMOOTHCOLORTRANSITION, MF_CHECKED | MF_BYCOMMAND);
+        m_SmoothLevel = true;
+    }
+
     m_NeedToRedraw = true;
     Invalidate(FALSE);
 }

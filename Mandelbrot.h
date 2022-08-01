@@ -42,14 +42,13 @@ class CMandelbrotApp : public CWinApp
 public:
     CMandelbrotApp();
 
-
 // Overrides
 public:
     virtual BOOL InitInstance();
 
 // Implementation
-    afx_msg void OnAppAbout();
     DECLARE_MESSAGE_MAP()
+    afx_msg void OnAppAbout();
 };
 
 extern CMandelbrotApp theApp;

@@ -83,6 +83,7 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
         TRACE0("Failed to create status bar\n");
         return -1;      // fail to create
     }
+
     //hide the pretty much unused status bar.
     m_wndStatusBar.ShowWindow(SW_HIDE);
 
@@ -94,6 +95,8 @@ int CMainFrame::OnCreate(LPCREATESTRUCT lpCreateStruct)
     CMenu* menu = GetMenu();
     menu->CheckMenuRadioItem(ID_ITERATIONS, ID_ITERATIONS_LAST, ID_ITERATIONS + 2, MF_BYCOMMAND);
     menu->CheckMenuRadioItem(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, ID_SETTYPE_MANDELBROT, MF_BYCOMMAND);
+    menu->CheckMenuRadioItem(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, ID_VIEW_GRADIENTS, MF_BYCOMMAND);
+    menu->CheckMenuItem(ID_VIEW_SMOOTHCOLORTRANSITION, MF_CHECKED | MF_BYCOMMAND);
     return 0;
 }
 

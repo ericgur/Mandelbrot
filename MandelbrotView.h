@@ -24,13 +24,21 @@
 
 // MandelbrotView.h : interface of the CMandelbrotView class
 //
+#pragma once
 
 #include "fixed_point128.h"
 using namespace fp128;
 
 typedef fixed_point128<8> fixed_8_120_t;
 
-#pragma once
+enum palette_t
+{
+    palGrey,
+    palGradient,
+    palVivid,
+    palHistogram
+};
+
 enum set_type_t
 {
     stMandelbrot,
@@ -78,11 +86,10 @@ protected:
     float* m_Iterations;
     double m_Frequency;
     bool m_NeedToRedraw;
-    bool m_GreyScale;
-    bool m_HistogramColoring;
     bool m_SmoothLevel;
     set_type_t m_SetType;
     double m_JuliaCr, m_JuliaCi; // real and imaginary parts of the Julia constant
+    palette_t m_PaletteType;
 
     // Set default values for zoom and coords
     void SetDefaultValues();
@@ -94,6 +101,7 @@ protected:
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
     void CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height);
     void OnZoomChange(CPoint& point, double zoomMultiplier);
+
     // Generated message map functions
 protected:
     DECLARE_MESSAGE_MAP()
@@ -103,10 +111,10 @@ protected:
     afx_msg int  OnCreate(LPCREATESTRUCT lpCreateStruct);
     afx_msg void OnSetTypeSelect(UINT nID);
     afx_msg void OnIterationChange(UINT nID);
-    afx_msg void OnGreyScale();
     afx_msg void OnFileSaveImage();
-    afx_msg void OnHistogramColoring();
+    afx_msg void OnPaletteChange(UINT nID);
     afx_msg void OnResetView();
+    afx_msg void OnSmoothColorTransitions();
     afx_msg void OnSetTypeChooseJuliaConstant();
 };
 

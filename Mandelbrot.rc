@@ -202,9 +202,13 @@ BEGIN
     POPUP "&View",                          65535,MFT_STRING,MFS_ENABLED
     BEGIN
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR,MFT_STRING,MFS_ENABLED
+        MENUITEM MFT_SEPARATOR
         MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
+        MENUITEM "Gradients",                   ID_VIEW_GRADIENTS,MFT_STRING,MFS_ENABLED
+        MENUITEM "Vivid Colors",                ID_VIEW_VIVIDCOLORS,MFT_STRING,MFS_ENABLED
         MENUITEM "Histogram Coloring",          ID_VIEW_HISTOGRAMCOLORING,MFT_STRING,MFS_ENABLED
         MENUITEM MFT_SEPARATOR
+        MENUITEM "Smooth Color Transition",     ID_VIEW_SMOOTHCOLORTRANSITION,MFT_STRING,MFS_ENABLED
         MENUITEM "Reset View",                  ID_VIEW_RESETVIEW,MFT_STRING,MFS_ENABLED
     END
     POPUP "Set Type",                       65535,MFT_STRING,MFS_ENABLED
@@ -523,6 +527,10 @@ END
 STRINGTABLE
 BEGIN
     ID_VIEW_GREYSCALE       "Use grey scale instead of colors"
+END
+
+STRINGTABLE
+BEGIN
     ID_FILE_SAVE_IMAGE      "Save shown image to disk"
 END
 

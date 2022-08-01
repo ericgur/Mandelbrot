@@ -74,10 +74,9 @@ BOOL CMandelbrotApp::InitInstance()
     // such as the name of your company or organization
     //SetRegistryKey(L"Local AppWizard-Generated Applications");
     //LoadStdProfileSettings(4);  // Load standard INI file options (including MRU)
+    
     // Register the application's document templates.  Document templates
     //  serve as the connection between documents, frame windows and views
-
-
     CSingleDocTemplate* pDocTemplate;
     pDocTemplate = new CSingleDocTemplate(
         IDR_MAINFRAME,
@@ -94,12 +93,8 @@ BOOL CMandelbrotApp::InitInstance()
     if (!ProcessShellCommand(cmdInfo))
         return FALSE;
     // The one and only window has been initialized, so show and update it
- 
-
     m_pMainWnd->ShowWindow(SW_SHOW);
     m_pMainWnd->UpdateWindow();
-    //CMenu* menu = m_pMainWnd->GetMenu();
-    //menu->CheckMenuItem(ID_VIEW_STATUS_BAR, MF_UNCHECKED);
 
     // call DragAcceptFiles only if there's a suffix
     //  In an SDI app, this should occur after ProcessShellCommand
@@ -112,30 +107,21 @@ BOOL CMandelbrotApp::InitInstance()
 class CAboutDlg : public CDialog
 {
 public:
-    CAboutDlg();
+    CAboutDlg() {}
 
     // Dialog Data
     enum { IDD = IDD_ABOUTBOX };
 
 protected:
-    virtual void DoDataExchange(CDataExchange* pDX);    // DDX/DDV support
+    virtual void DoDataExchange(CDataExchange* pDX)    // DDX/DDV support
+    {
+        CDialog::DoDataExchange(pDX);
+    }
 
 // Implementation
 protected:
     DECLARE_MESSAGE_MAP()
 };
-
-
-CAboutDlg::CAboutDlg() : CDialog(CAboutDlg::IDD)
-{
-}
-
-
-void CAboutDlg::DoDataExchange(CDataExchange* pDX)
-{
-    CDialog::DoDataExchange(pDX);
-}
-
 
 BEGIN_MESSAGE_MAP(CAboutDlg, CDialog)
 END_MESSAGE_MAP()
