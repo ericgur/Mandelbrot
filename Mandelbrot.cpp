@@ -107,7 +107,7 @@ BOOL CMandelbrotApp::InitInstance()
 class CAboutDlg : public CDialog
 {
 public:
-    CAboutDlg() {}
+    CAboutDlg() : CDialog(IDD) {}
 
     // Dialog Data
     enum { IDD = IDD_ABOUTBOX };

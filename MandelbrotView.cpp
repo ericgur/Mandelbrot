@@ -740,7 +740,6 @@ void CMandelbrotView::CreateColorTables()
         }
     }
     else if (m_PaletteType == palGradient) {
-        DWORD r = 4, g = 6, b = 190;
         for (size_t i = 1; i <= m_MaxIter; ++i) {
             size_t c = m_MaxIter - i;
             m_ColorTable32[i] = RGB(c * 4 & 255, c * 6 & 255, c * 3 & 255);
