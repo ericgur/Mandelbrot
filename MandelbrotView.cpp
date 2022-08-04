@@ -371,8 +371,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
             }
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 1) {
-                // TODO: simplify casting once operator float is implemented
-                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)(double)modulus)))) / LOG2;
+                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
             }
             else {
                 *(pbuff++) = (float)max(iter, 1);
@@ -740,7 +739,6 @@ void CMandelbrotView::CreateColorTables()
         }
     }
     else if (m_PaletteType == palGradient) {
-        DWORD r = 4, g = 6, b = 190;
         for (size_t i = 1; i <= m_MaxIter; ++i) {
             size_t c = m_MaxIter - i;
             m_ColorTable32[i] = RGB(c * 4 & 255, c * 6 & 255, c * 3 & 255);

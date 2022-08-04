@@ -22,6 +22,16 @@
     SOFTWARE.
 ************************************************************************************/
 
+/***********************************************************************************
+                                Acknologements 
+    The function div_32bit is derived from the book "Hacker's Delight" 2nd Edition by 
+    Henry S. Warren Jr. It was converted to 32 bit operations + a bugfix.
+
+    The sin, cos, exp  functions were adapted from the Fixed Point Math 
+    Library. Copyright (c) 2007-2009: Peter Schregle
+
+************************************************************************************/
+
 #ifndef FIXED_POINT128_H
 #define FIXED_POINT128_H
 
@@ -37,6 +47,7 @@ typedef unsigned int uint32;
 typedef short int16;
 typedef unsigned short uint16;
 
+// useful macros
 #ifndef ONE_SHIFT
 #define ONE_SHIFT(x)  (1ull << (x))
 #endif
@@ -77,11 +88,6 @@ namespace fp128 {
 // Forward declarations
 inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m, int64 n);
 template<int int_bits> class fixed_point128;
-template<int int_bits> inline fixed_point128<int_bits> fabs(const fixed_point128<int_bits>& val) noexcept;
-template<int int_bits> inline fixed_point128<int_bits> floor(const fixed_point128<int_bits>& val) noexcept;
-template<int int_bits> inline fixed_point128<int_bits> ciel(const fixed_point128<int_bits>& val) noexcept;
-template<int int_bits> inline fixed_point128<int_bits> fmod(const fixed_point128<int_bits>& x, const fixed_point128<int_bits>& y) noexcept;
-template<int int_bits> inline fixed_point128<int_bits> modf(const fixed_point128<int_bits>& x, fixed_point128<int_bits>* iptr) noexcept;
 
 // Main fixed point type template
 template<int int_bits = 16>
@@ -89,11 +95,6 @@ class fixed_point128
 {
     static_assert(1 <= int_bits && int_bits <= 64, "Template parameter <int_bits> must be in the [1,64] range!");
     // friends
-    friend fixed_point128<int_bits> fp128::fabs(const fixed_point128<int_bits>&) noexcept;
-    friend fixed_point128<int_bits> fp128::floor(const fixed_point128<int_bits>&) noexcept;
-    friend fixed_point128<int_bits> fp128::ciel(const fixed_point128<int_bits>&) noexcept;
-    friend fixed_point128<int_bits> fp128::fmod(const fixed_point128<int_bits>&, const fixed_point128<int_bits>&) noexcept;
-    friend fixed_point128<int_bits> fp128::modf(const fixed_point128<int_bits>&, fixed_point128<int_bits>*) noexcept;
     friend class fixed_point128; // this class is a friend of all its template instances. Avoids awkward getter/setter functions.
     //
     // members
@@ -243,6 +244,13 @@ public:
         }        
 
         free(str);
+    }
+    
+    // Construct from base elements.
+    fixed_point128(uint64 l, uint64 h, int s) {
+        low = l;
+        high = h;
+        sign = s;
     }
 
     // assignment operators
@@ -402,56 +410,35 @@ public:
     }
 
     inline fixed_point128& operator+=(const fixed_point128& other) {
-        unsigned char carry;
-        // different sign: convert other to negative and use operator -=
-        if (other.sign != sign) {
-            fixed_point128 temp(other);
-            temp.sign ^= 1;
-            *this -= temp;
+        if (!other) {
             return *this;
         }
 
-        // equal sign: simple case
-        carry = _addcarry_u64(0, low, other.low, &low);
-        _addcarry_u64(carry, high, other.high, &high);
-        
-        // set sign to 0 when both low and high are zero (avoid having negative zero value)
-        sign &= (0 != low || 0 != high);
-        return *this;
+        // different sign: convert other to negative and use operator -=
+        if (other.sign != sign) {
+            fixed_point128 temp = -other;
+            return subtract(temp);
+        }
+
+        return add(other);
     }
 
     inline fixed_point128& operator-=(const fixed_point128& other) {
-        unsigned char carry;
-        // different sign: convert other to negative and use operator +=
-        if (other.sign != sign) {
-            fixed_point128 temp(other);
-            temp.sign ^= 1;
-            *this += temp;
+        if (!other) {
             return *this;
         }
-        
-        // equal sign: simple case
-        // convert other high/low to 2's complement (flip bits, add +1)
-        uint64 other_low, other_high = ~other.high;
-        other_high += _addcarry_u64(0, ~other.low, 1, &other_low);
-        
-        //add the other value
-        carry = _addcarry_u64(0, low, other_low, &low); // convert low to 2's complement
-        _addcarry_u64(carry, high, other_high, &high); // convert low to 2's complement
 
-        // if result is is negative, invert it along with the sign.
-        if (0 != (high >> 63)) {
-            sign ^= 1;
-            carry = _addcarry_u64(0, ~low, 1, &low);
-            high = ~high + carry;
+        // different sign: convert other to negative and use operator +=
+        if (other.sign != sign) {
+            fixed_point128 temp = -other;
+            return add(temp);
         }
-        
-        // set sign to 0 when both low and high are zero (avoid having negative zero value)
-        sign &= (0 != low || 0 != high);
-        return *this;
+
+        return subtract(other);
     }
 
     inline fixed_point128& operator*=(const fixed_point128& other) {
+    //__declspec(noinline) fixed_point128& operator*=(const fixed_point128& other) {
         uint64 res[4]; // 256 bit of result
         uint64 temp1[2], temp2[2];
         unsigned char carry;
@@ -481,10 +468,8 @@ public:
         static_assert(lsb <= 64);
 
         // copy block #1 (lowest)
-        low = res[index + 1] << lsb_comp;
-        low |= (res[index] >> lsb) & lsb_comp_mask;
-        high = res[index + 2] << lsb_comp;
-        high |= (res[index + 1] >> lsb) & lsb_comp_mask;
+        low = __shiftright128(res[index], res[index + 1], lsb);
+        high = __shiftright128(res[index+1], res[index + 2], lsb);
 
         // set the sign
         sign ^= other.sign;
@@ -555,8 +540,8 @@ public:
         uint64 q[4] = {0}, *r = nullptr; // don't need the reminder
         if (0 == div_32bit((uint32*)q, (uint32*)r, (uint32*)nom, (uint32*)denom, sizeof(nom) / sizeof(uint32), sizeof(denom) / sizeof(uint32))) {
             // result in q needs to shift left by frac_bits
-            high = (q[2] << upper_frac_bits) | (q[1] >> int_bits);
-            low  = (q[1] << upper_frac_bits) | (q[0] >> int_bits);
+            high = __shiftright128(q[1], q[2], int_bits);
+            low = __shiftright128(q[0], q[1], int_bits);
             sign ^= other.sign;
             // set sign to 0 when both low and high are zero (avoid having negative zero value)
             sign &= (0 != low || 0 != high);
@@ -754,11 +739,11 @@ public:
     // Comparison operators
     //
     inline bool operator==(const fixed_point128& other) const {
-        return sign == sign && high == high && low == low;
+        return sign == other.sign && high == other.high && low == other.low;
     }
 
     inline bool operator!=(const fixed_point128& other) const {
-        return sign != sign || high != high || low != low;
+        return sign != other.sign || high != other.high || low != other.low;
     }
 
     inline bool operator<(const fixed_point128& other) const {
@@ -772,6 +757,7 @@ public:
 
         return (sign) ? high > other.high : high < other.high;
     }
+
     inline bool operator<=(const fixed_point128& other) const {
         // signs are different
         if (sign != other.sign)
@@ -815,6 +801,176 @@ public:
     {
         return 0 == sign;
     }
+    inline bool is_zero() const
+    {
+        return 0 == low && 0 == high;
+    }
+private:
+    inline fixed_point128& add(const fixed_point128& other) {
+        unsigned char carry;
+        ASSERT(other.sign == sign);
+        // equal sign: simple case
+        carry = _addcarry_u64(0, low, other.low, &low);
+        _addcarry_u64(carry, high, other.high, &high);
+
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
+        return *this;
+    }
+
+    inline fixed_point128& subtract(const fixed_point128& other) {
+        unsigned char carry;
+        ASSERT(other.sign == sign);
+
+        // convert other high/low to 2's complement (flip bits, add +1)
+        uint64 other_low, other_high = ~other.high;
+        other_high += _addcarry_u64(0, ~other.low, 1, &other_low);
+
+        //add the other value
+        carry = _addcarry_u64(0, low, other_low, &low); // convert low to 2's complement
+        carry = _addcarry_u64(carry, high, other_high, &high); // convert low to 2's complement
+
+        // if result is is negative, invert it along with the sign.
+        //if (0 != (high >> 63)) {
+        if (high & ONE_SHIFT(63)) {
+            sign ^= 1;
+            carry = _addcarry_u64(0, ~low, 1, &low);
+            high = ~high + carry;
+        }
+
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
+        return *this;
+    }
+
+public:
+    /**
+     * @brief returns the absolute value (sets sign to 0)
+     * @param x - fixed_point128 element
+     * @return - a copy of x with sign removed
+    */
+    friend inline fixed_point128 fabs(const fixed_point128& val) noexcept
+    {
+        fixed_point128 temp = val;
+        temp.sign = 0;
+        return temp;
+    }
+    /**
+     * @brief peforms the floor() function, similar to libc's floor(), rounds down towards -infinity.
+     * @param x - input value
+     * @return a fixed_point128 holding the integer value. Overflow is not reported.
+    */
+    friend inline fixed_point128 floor(const fixed_point128& val) noexcept
+    {
+        auto temp = val;
+        temp.low = 0;
+        uint64 frac = temp.high & ~temp.int_mask;
+        temp.high &= temp.int_mask;
+        // floor always rounds towards -infinity
+        if (0 != temp.sign and 0 != frac) {
+            ++temp;
+        }
+        return temp;
+    }
+
+    /**
+     * @brief peforms the ciel() function, similar to libc's ciel(), rounds up towards infinity.
+     * @param x - input value
+     * @return a fixed_point128 holding the integer value. Overflow is not reported.
+    */
+    friend inline fixed_point128 ciel(const fixed_point128& val) noexcept
+    {
+        auto temp = val;
+        temp.low = 0;
+        uint64 frac = temp.high & ~temp.int_mask;
+        temp.high &= temp.int_mask;
+        // ciel always rounds towards infinity
+        if (0 != temp.sign and 0 != frac) {
+            ++temp;
+        }
+        return temp;
+    }
+
+    /**
+     * @brief peforms the fmod() function, similar to libc's fmod(), returns the remainder of a division x/y.
+     * @param x - nominator
+     * @param y - denominator
+     * @return a fixed_point128 holding the modulo value.
+    */
+    friend inline fixed_point128 fmod(const fixed_point128& x, const fixed_point128& y) noexcept
+    {
+        return x % y;
+    }
+
+    /**
+     * @brief Split into integer and fraction parts.
+     * @param x - input value
+     * @param iptr - pointer to fixed_point128 holding the integer part of x
+     * @return the fraction part of x. Undefined when iptr is nullptr.
+    */
+    friend inline fixed_point128 modf(const fixed_point128& x, fixed_point128* iptr) noexcept
+    {
+        if (iptr == nullptr) {
+            return 0;
+        }
+        iptr->high = x.high & x.int_mask; // lose the fraction
+        iptr->low = 0;
+        iptr->sign = x.sign;
+
+        fixed_point128 res = x;
+        res.high &= ~x.int_mask; // lose the integer part
+        return res;
+    }
+
+
+    /// Calculates the square root.
+
+    /**
+     * @brief Calculates the square root.
+     * @param x - value to calculate the root of
+     * @return square root of (x), zero for negative or zero values of x
+    */
+    friend inline fixed_point128 sqrt(const fixed_point128& x) noexcept
+    {
+        if (x.sign || !x)
+            return 0;
+
+        fixed_point128 ul = 0, ll = 0, t = 0, e(1, 0, 0);
+        int s = 0;
+        ul.low = 1ull;
+        s = (x.high != 0) ? 128 - (int)__lzcnt64(x.high) : 64 - (int)__lzcnt64(x.low);
+
+        // x >= 1
+        if (s >= x.frac_bits) {
+            ul = x;     // upper limit
+            ll.low = 1; // lower limit
+            ll <<= x.frac_bits + ((s - x.frac_bits - 1) >> 1);
+        }
+        // x < 1
+        else {
+            ul.low = 1; // upper limit
+            ul <<= x.frac_bits;
+            ll = x;     // lower limit
+        }
+
+        // yeh old binary search
+        t = (ul + ll) >> 1;
+        while (ul > ll + e) {
+            // printf("g0: %0.15lf\n", (double)ul);
+            // printf("g1: %0.15lf\n", (double)ll);
+            // printf("t: %0.15lf\n", (double)t);
+            if (t * t > x) {
+                ul = (ll + ul) >> 1; // decrease upper limit
+            }
+            else {
+                ll = (ll + ul) >> 1; // increase lower limit
+            }
+            t = (ul + ll) >> 1;
+        }
+
+        return ul;
+    }
+
 };
 
 /**
@@ -915,90 +1071,6 @@ inline int div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int
         }
     }
     return 0;
-}
-
-/**
- * @brief returns the absolute value (sets sign to 0)
- * @param val - fixed_point128 element
- * @return - a copy of val with sign removed
-*/
-template<int int_bits>
-inline fixed_point128<int_bits> fabs(const fixed_point128<int_bits>& val) noexcept
-{
-    fixed_point128 temp = val;
-    temp.sign = 0;
-    return temp;
-}
-
-/**
- * @brief peforms the floor() function, similar to libc's floor(), rounds down towards -infinity.
- * @param val - input value
- * @return a fixed_point128 holding the integer value. Overflow is not reported.
-*/
-template<int int_bits>
-inline fixed_point128<int_bits> floor(const fixed_point128<int_bits>& val) noexcept
-{
-    auto temp = val;
-    temp.low = 0;
-    uint64 frac = temp.high & ~temp.int_mask;
-    temp.high &= temp.int_mask;
-    // floor always rounds towards -infinity
-    if (0 != temp.sign and 0 != frac) {
-        ++temp;
-    }
-    return temp;
-}
-
-/**
- * @brief peforms the ciel() function, similar to libc's ciel(), rounds up towards infinity.
- * @param val - input value
- * @return a fixed_point128 holding the integer value. Overflow is not reported.
-*/
-template<int int_bits>
-inline fixed_point128<int_bits> ciel(const fixed_point128<int_bits>& val) noexcept
-{
-    auto temp = val;
-    temp.low = 0;
-    uint64 frac = temp.high & ~temp.int_mask;
-    temp.high &= temp.int_mask;
-    // ciel always rounds towards infinity
-    if (0 != temp.sign and 0 != frac) {
-        ++temp;
-    }
-    return temp;
-}
-
-/**
- * @brief peforms the fmod() function, similar to libc's fmod(), returns the remainder of a division x/y.
- * @param x - nominator
- * @param y - denominator
- * @return a fixed_point128 holding the modulo value.
-*/
-template<int int_bits>
-inline fixed_point128<int_bits> fmod(const fixed_point128<int_bits>& x, const fixed_point128<int_bits>& y) noexcept
-{
-    return x % y;
-}
-
-/**
- * @brief Split into integer and fraction parts.
- * @param x - input value
- * @param iptr - pointer to fixed_point128 holding the integer part of x
- * @return the fraction part of x. Undefined when iptr is nullptr.
-*/
-template<int int_bits>
-inline fixed_point128<int_bits> modf(const fixed_point128<int_bits>& x, fixed_point128<int_bits>* iptr) noexcept
-{
-    if (iptr == nullptr) {
-        return 0;
-    }
-    iptr->high = x.high & x.int_mask; // lose the fraction
-    iptr->low = 0;
-    iptr->sign = x.sign;
-
-    fixed_point128 res = x;
-    res.high &= ~x.int_mask; // lose the integer part
-    return res;
 }
 
 } //namespace fp128
