@@ -90,12 +90,12 @@ protected:
     set_type_t m_SetType;
     double m_JuliaCr, m_JuliaCi; // real and imaginary parts of the Julia constant
     palette_t m_PaletteType;
+    bool m_IsResizing;
 
     // Set default values for zoom and coords
     void SetDefaultValues();
     void SetAspectRatio();
     void CreateColorTables();
-    void CreateHsvTable();
     void DrawImageDouble(float* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
     void DrawImageFixedPoint128(float* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
@@ -116,6 +116,8 @@ protected:
     afx_msg void OnResetView();
     afx_msg void OnSmoothColorTransitions();
     afx_msg void OnSetTypeChooseJuliaConstant();
+    afx_msg void OnEnterSizeMove();
+    afx_msg void OnExitSizeMove();
 };
 
 #ifndef _DEBUG  // debug version in MandelbrotView.cpp

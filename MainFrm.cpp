@@ -42,6 +42,8 @@ IMPLEMENT_DYNCREATE(CMainFrame, CFrameWnd)
 
 BEGIN_MESSAGE_MAP(CMainFrame, CFrameWnd)
     ON_WM_CREATE()
+    ON_WM_ENTERSIZEMOVE()
+    ON_WM_EXITSIZEMOVE()
 END_MESSAGE_MAP()
 
 static UINT indicators[] =

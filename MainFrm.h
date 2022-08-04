@@ -58,8 +58,11 @@ protected:  // control bar embedded members
 
 // Generated message map functions
 protected:
-    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
     DECLARE_MESSAGE_MAP()
+    afx_msg int OnCreate(LPCREATESTRUCT lpCreateStruct);
+    afx_msg void OnEnterSizeMove() { GetActiveView()->SendMessage(WM_ENTERSIZEMOVE, 0, 0); }
+    afx_msg void OnExitSizeMove() { GetActiveView()->SendMessage(WM_EXITSIZEMOVE, 0, 0); }
+
 };
 
 

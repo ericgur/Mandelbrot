@@ -1,5 +1,5 @@
 /***********************************************************************************
-    MIT License
+7    MIT License
 
     Copyright (c) 2022 Eric Gur (ericgur@iname.com)
 
@@ -95,6 +95,8 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_WM_RBUTTONDOWN()
     ON_WM_MBUTTONDOWN()
     ON_WM_CREATE()
+    ON_WM_SIZE()
+    ON_WM_SIZING()
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
     ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
     ON_COMMAND(ID_VIEW_RESETVIEW, &CMandelbrotView::OnResetView)
@@ -102,6 +104,8 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
     ON_COMMAND(ID_VIEW_SMOOTHCOLORTRANSITION, &CMandelbrotView::OnSmoothColorTransitions)
+    ON_WM_ENTERSIZEMOVE()
+    ON_WM_EXITSIZEMOVE()
 END_MESSAGE_MAP()
 
 
@@ -119,6 +123,7 @@ CMandelbrotView::CMandelbrotView()
     m_SetType = stMandelbrot;
     m_JuliaCr = 0.285;
     m_JuliaCi = 0.01;
+    m_IsResizing = false;
 
     //fill bitmap header
     memset(&m_BmpInfo, 0, sizeof(m_BmpInfo));
@@ -159,6 +164,20 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
     //  the CREATESTRUCT cs
 
     return CView::PreCreateWindow(cs);
+}
+
+
+void CMandelbrotView::OnEnterSizeMove()
+{ 
+    m_IsResizing = true; 
+}
+
+
+void CMandelbrotView::OnExitSizeMove() 
+{ 
+    m_IsResizing = false; 
+    m_NeedToRedraw = true;
+    Invalidate(FALSE);
 }
 
 
@@ -480,6 +499,23 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     SetAspectRatio();
     GetClientRect(rect);
     const int width = rect.Width(), height = rect.Height();
+
+    if (m_IsResizing) {
+        if (m_BmpBits != nullptr) {
+            int w = m_BmpInfo.bmiHeader.biWidth;
+            int h = m_BmpInfo.bmiHeader.biHeight;
+            CBitmap bmp;
+            bmp.CreateDiscardableBitmap(pDC, w, h);
+
+            CDC memDC;
+            memDC.CreateCompatibleDC(pDC);
+            memDC.SelectObject(bmp);
+            SetDIBitsToDevice((HDC)(memDC), 0, 0, w, h, 0, 0, 0, h, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
+
+            pDC->StretchBlt(0, 0, width, height, &memDC, 0, 0, w, h, SRCCOPY);
+            return;
+        }
+    }
 
     // deallocate on size change
     if (m_BmpInfo.bmiHeader.biHeight != height || m_BmpInfo.bmiHeader.biWidth != width) {
