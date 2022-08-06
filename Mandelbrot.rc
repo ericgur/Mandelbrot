@@ -180,7 +180,12 @@ IDR_MAINFRAME MENUEX
 BEGIN
     POPUP "&File",                          65535,MFT_STRING,MFS_ENABLED
     BEGIN
-        MENUITEM "&Save Image",                 ID_FILE_SAVE_IMAGE,MFT_STRING,MFS_ENABLED
+        POPUP "&Save Image",                    65535,MFT_STRING,MFS_ENABLED
+        BEGIN
+            MENUITEM "1920x1080",                   ID_SAVEIMAGE_1920X1080,MFT_STRING,MFS_ENABLED
+            MENUITEM "2560x1440",                   ID_SAVEIMAGE_2560X1440,MFT_STRING,MFS_ENABLED
+            MENUITEM "3840x2160",                   ID_SAVEIMAGE_3840X2160,MFT_STRING,MFS_ENABLED
+        END
         MENUITEM "E&xit",                       ID_APP_EXIT,MFT_STRING,MFS_ENABLED
     END
     POPUP "Iterations",                     65535,MFT_STRING,MFS_ENABLED

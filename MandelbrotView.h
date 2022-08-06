@@ -111,7 +111,7 @@ protected:
     afx_msg int  OnCreate(LPCREATESTRUCT lpCreateStruct);
     afx_msg void OnSetTypeSelect(UINT nID);
     afx_msg void OnIterationChange(UINT nID);
-    afx_msg void OnFileSaveImage();
+    afx_msg void OnFileSaveImage(UINT nID);
     afx_msg void OnPaletteChange(UINT nID);
     afx_msg void OnResetView();
     afx_msg void OnSmoothColorTransitions();

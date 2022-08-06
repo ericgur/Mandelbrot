@@ -98,7 +98,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_WM_SIZE()
     ON_WM_SIZING()
     ON_COMMAND_RANGE(ID_ITERATIONS, ID_ITERATIONS_LAST, OnIterationChange)
-    ON_COMMAND(ID_FILE_SAVE_IMAGE, &CMandelbrotView::OnFileSaveImage)
+    ON_COMMAND_RANGE(ID_SAVEIMAGE_1920X1080, ID_SAVEIMAGE_3840X2160, &CMandelbrotView::OnFileSaveImage)
     ON_COMMAND(ID_VIEW_RESETVIEW, &CMandelbrotView::OnResetView)
     ON_COMMAND_RANGE(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnPaletteChange)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
@@ -884,9 +884,23 @@ void CMandelbrotView::OnPaletteChange(UINT nID)
 /**
  * @brief Callback for ID_FILE_SAVE_IMAGE menu item. Save the image to disk. Uses Same X coordinates but modifies the Y coordinates to fit the resolution.
 */
-void CMandelbrotView::OnFileSaveImage()
+void CMandelbrotView::OnFileSaveImage(UINT nID)
 {
-    int width = 2560, height = 1440; // TODO: add more resolutions.
+    int width = 0, height = 0; // TODO: add more resolutions.
+    switch (nID) {
+    case ID_SAVEIMAGE_1920X1080:
+        width = 1920, height = 1080;
+        break;
+    case ID_SAVEIMAGE_2560X1440:
+        width = 2560, height = 1440;
+        break;
+    case ID_SAVEIMAGE_3840X2160:
+        width = 3840, height = 2160;
+        break;
+    default:
+        DebugPrint(L"OnSetTypeSelect: Invalid nID received %d\n", nID);
+        break;
+    }
 
     CImage image;
     image.Create(width, -height, 32);
