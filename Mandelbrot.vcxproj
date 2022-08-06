@@ -187,7 +187,11 @@
     <Image Include="res\userimages.bmp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="cpp.hint" />
     <None Include="res\Mandelbrot.rc2" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="fixed_point128.natvis" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />
   <ImportGroup Label="ExtensionTargets">

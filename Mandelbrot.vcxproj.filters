@@ -152,5 +152,9 @@
     <None Include="res\Mandelbrot.rc2">
       <Filter>Resource Files</Filter>
     </None>
+    <None Include="cpp.hint" />
+  </ItemGroup>
+  <ItemGroup>
+    <Natvis Include="fixed_point128.natvis" />
   </ItemGroup>
 </Project>
