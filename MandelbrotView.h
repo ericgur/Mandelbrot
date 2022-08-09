@@ -85,12 +85,15 @@ protected:
     COLORREF* m_BmpBits;
     float* m_Iterations;
     double m_Frequency;
-    bool m_NeedToRedraw;
+    bool m_NeedToRecompute;
     bool m_SmoothLevel;
     set_type_t m_SetType;
     double m_JuliaCr, m_JuliaCi; // real and imaginary parts of the Julia constant
     palette_t m_PaletteType;
     bool m_IsResizing;
+    bool m_AnimatePalette;
+    UINT_PTR m_TimerID;
+    UINT m_PaletteOffset;
 
     // Set default values for zoom and coords
     void SetDefaultValues();
@@ -114,10 +117,12 @@ protected:
     afx_msg void OnFileSaveImage(UINT nID);
     afx_msg void OnPaletteChange(UINT nID);
     afx_msg void OnResetView();
+    afx_msg void OnAnimatePalette();
     afx_msg void OnSmoothColorTransitions();
     afx_msg void OnSetTypeChooseJuliaConstant();
     afx_msg void OnEnterSizeMove();
     afx_msg void OnExitSizeMove();
+    afx_msg void OnTimer(UINT_PTR nIDEvent);
 };
 
 #ifndef _DEBUG  // debug version in MandelbrotView.cpp
