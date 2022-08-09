@@ -40,6 +40,7 @@
 //#define DISABLE_OMP 1
 //#define FLOAT128_DEBUG 1
 //#define INITIAL_POINT 1
+//#define PROFILING 1
 
 #ifdef FLOAT128_DEBUG
 #define MAX_ZOOM (1ull<<1)   // for debug purposes
@@ -119,6 +120,7 @@ CMandelbrotView::CMandelbrotView()
     m_MaxIter = 128;
     m_SmoothLevel = true;
     m_ColorTable32 = nullptr;
+    m_Histogram = nullptr;
     m_BmpBits = nullptr;
     m_Iterations = nullptr;
     m_BuffLen = 0;
@@ -127,7 +129,6 @@ CMandelbrotView::CMandelbrotView()
     m_JuliaCi = 0.01;
     m_IsResizing = false;
     m_AnimatePalette = false;
-    m_PaletteOffset = 0;
     m_TimerID = 0;
 
     //fill bitmap header
@@ -160,6 +161,8 @@ CMandelbrotView::~CMandelbrotView()
         free(m_BmpBits);
     if (m_Iterations)
         delete[] m_Iterations;
+    if (m_Histogram)
+        delete[] m_Histogram;
 }
 
 
@@ -186,49 +189,15 @@ void CMandelbrotView::OnExitSizeMove()
 }
 
 
-void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
+void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int height)
 {
-    if (m_PaletteType != palHistogram) {
-        for (int l = 0; l < height; ++l) {
-            //point to start of buffer
-            COLORREF* pDibPixel = pBits + width * l;
-            const float* pIter = pIterations + width * l;
+    if (m_Histogram)
+        delete[] m_Histogram;
 
-            for (int k = 0; k < width; ++k) {
-                float mu = *pIter++;
-                if (mu >= m_MaxIter) {
-                    *(pDibPixel++) = 0;
-                    continue;
-                }
-
-                int index = (int)floor(mu);
-
-                if (index < 1) {
-                    *(pDibPixel++) = m_ColorTable32[1];
-                }
-                else {
-                    COLORREF c1 = m_ColorTable32[index];
-                    COLORREF c2 = m_ColorTable32[index + 1];
-                    DWORD alpha = (DWORD)(255.0 * (mu - index));
-                    if (alpha > 255)
-                        alpha = 255;
-                    COLORREF res = blendAlpha(c1, c2, alpha);
-                    *(pDibPixel++) = res;
-                }
-            }
-        }
-        return;
-    }
-
-    // create histogram
-    LARGE_INTEGER time_start, time_end;
-    QueryPerformanceCounter(&time_start);
-    int* histogram = new int[m_MaxIter + 1];
-    ZeroMemory(histogram, sizeof(int) * (m_MaxIter + 1));
+    m_Histogram = new int[m_MaxIter + 2];
+    ZeroMemory(m_Histogram, sizeof(int) * (m_MaxIter + 2));
     float* hues = new float[m_MaxIter + 1];
     ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1));
-    COLORREF* hsv2COLORREF = new COLORREF[m_MaxIter + 1];
-    ZeroMemory(hsv2COLORREF, sizeof(COLORREF) * (m_MaxIter + 1));
 
     // TODO: make this code parallel
     // create histogram of the iterations
@@ -238,53 +207,62 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
             int iter = (int)floorf(*pIter);
             iter = max(iter, 1);
             if (iter < m_MaxIter)
-                ++histogram[iter];
+                ++m_Histogram[iter];
 
             ++pIter;
         }
     }
-    
+
     // normalize the iterations
     int total = 0;
     for (int i = 0; i < m_MaxIter; ++i) { // not counting the max iteration score (always black)
-        total += histogram[i];
+        total += m_Histogram[i];
     }
-    
+
     float hue = 0;
     for (int i = 0; i < m_MaxIter; ++i) {
-        hue += (float)histogram[i] / total;
+        hue += (float)m_Histogram[i] / total;
         hues[i] = min(hue, 1.f);
     }
     hues[m_MaxIter] = min(hue, 1.f);
 
     // create HSV to COLORREF table
-    float offset = (float)(m_PaletteOffset & 0xFF) / 255.f;
     for (int i = 0; i <= m_MaxIter; ++i) {
-        float h = offset + hues[i] * 6;
+        float h = hues[i] * 6;
         float x = (1.0f - abs(fmodf(h, 2) - 1.0f));
         switch ((int)floorf(h) % 6) {
         case 0: // 0-60 
-            hsv2COLORREF[i] = RGB(255, int(x * 255), 0);
+            m_ColorTable32[i] = RGB(255, int(x * 255), 0);
             break;
         case 1: // 60-120
-            hsv2COLORREF[i] = RGB(int(x * 255), 255, 0);
+            m_ColorTable32[i] = RGB(int(x * 255), 255, 0);
             break;
         case 2: // 120-180 
-            hsv2COLORREF[i] = RGB(0, 255, int(x * 255));
+            m_ColorTable32[i] = RGB(0, 255, int(x * 255));
             break;
         case 3: // 180-240
-            hsv2COLORREF[i] = RGB(0, int(x * 255), 255);
+            m_ColorTable32[i] = RGB(0, int(x * 255), 255);
             break;
         case 4: // 240-300
-            hsv2COLORREF[i] = RGB(int(x * 255), 0, 255);
+            m_ColorTable32[i] = RGB(int(x * 255), 0, 255);
             break;
         case 5: // 300-360
-            hsv2COLORREF[i] = RGB(255, 0, int(x * 255));
+            m_ColorTable32[i] = RGB(255, 0, int(x * 255));
             break;
         default: //bug
-            hsv2COLORREF[i] = RGB(255, 255, 255);
+            m_ColorTable32[i] = RGB(255, 255, 255);
         }
     }
+
+    delete[] hues;
+}
+
+
+void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
+{
+
+    LARGE_INTEGER time_start, time_end;
+    QueryPerformanceCounter(&time_start);
 
 #ifndef DISABLE_OMP
 #pragma omp parallel for
@@ -303,11 +281,11 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
 
             DWORD index = (DWORD)floor(mu);
             if (index < 0) {
-                *(pDibPixel++) = hsv2COLORREF[0];
+                *(pDibPixel++) = m_ColorTable32[0];
             }
             else {
-                COLORREF c1 = hsv2COLORREF[index];
-                COLORREF c2 = hsv2COLORREF[index + 1];
+                COLORREF c1 = m_ColorTable32[index];
+                COLORREF c2 = m_ColorTable32[index + 1];
                 DWORD alpha = (DWORD)(255.0 * (mu - index));
                 if (alpha > 255)
                     alpha = 255;
@@ -316,15 +294,16 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
         }
     }
 
-    delete[] histogram;
-    delete[] hues;
-    delete[] hsv2COLORREF;
+
     QueryPerformanceCounter(&time_end);
+
+#ifdef PROFILING
     DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
+
     CString text;
     text.Format(L"CreateDibFromIterations: (%ims)\n", totalTime);
     OutputDebugString(text);
-
+#endif
 }
 
 /**
@@ -567,6 +546,10 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         }
         else {
             DrawImageDouble(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+        }
+
+        if (palHistogram == m_PaletteType) {
+            CreateHistogram(m_Iterations, width, height);
         }
 
         //all done
@@ -896,7 +879,7 @@ void CMandelbrotView::OnPaletteChange(UINT nID)
     }
 
     CreateColorTables();
-    m_NeedToRecompute = false;
+    m_NeedToRecompute = (m_PaletteType == palHistogram);
     Invalidate(FALSE);
 }
 
@@ -1007,39 +990,35 @@ void CMandelbrotView::OnAnimatePalette()
     else {
         menu->CheckMenuItem(ID_VIEW_ANIMATEPALETTE, MF_CHECKED | MF_BYCOMMAND);
         m_AnimatePalette = true;
-        m_TimerID = SetTimer(1, 32, NULL); // timer causes WM_TIMER message
+        m_TimerID = SetTimer(1, 70, NULL); // timer causes WM_TIMER message
     }
 
     m_NeedToRecompute = false;
     Invalidate(FALSE);
 }
 
+/**
+ * @brief Callback for WM_TIMER events.
+ * @param nIDEvent Timer ID
+*/
 void CMandelbrotView::OnTimer(UINT_PTR nIDEvent)
 {
     // Call base class
-    CView::OnTimer(nIDEvent);
+    //CView::OnTimer(nIDEvent);
 
     // roll the m_ColorTable32 values
     if (nIDEvent == m_TimerID) {
-        if (m_PaletteType == palHistogram) {
-            m_PaletteOffset += 2;
-            if (m_PaletteOffset % 8 != 0)
-                return;
-            Invalidate(FALSE);
+        COLORREF* pBuff = new COLORREF[m_MaxIter + 1];
+        for (int i = 1; i < m_MaxIter; ++i) {
+            pBuff[i] = m_ColorTable32[i + 1];
         }
-        else {
-            COLORREF* pBuff = new COLORREF[m_MaxIter + 1];
-            for (int i = 1; i < m_MaxIter; ++i) {
-                pBuff[i] = m_ColorTable32[i + 1];
-            }
-            pBuff[0] = m_ColorTable32[0];
-            pBuff[m_MaxIter] = m_ColorTable32[1];
+        pBuff[0] = m_ColorTable32[0];
+        pBuff[m_MaxIter] = m_ColorTable32[1];
 
-            // Note - since using WM_TIMER message (always on the main thread), there's no need to protect with a mutex.
-            delete[] m_ColorTable32;
-            m_ColorTable32 = pBuff;
-            Invalidate(FALSE);
-        }
+        // Note - since using WM_TIMER message (always on the main thread), there's no need to protect with a mutex.
+        delete[] m_ColorTable32;
+        m_ColorTable32 = pBuff;
+        Invalidate(FALSE);
     }
 }
 
