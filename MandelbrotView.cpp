@@ -199,17 +199,27 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
     float* hues = new float[m_MaxIter + 1];
     ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1));
 
-    // TODO: make this code parallel
-    // create histogram of the iterations
-    for (int l = 0; l < height; ++l) {
-        const float* pIter = pIterations + width * l;
-        for (int k = 0; k < width; ++k) {
-            int iter = (int)floorf(*pIter);
-            iter = max(iter, 1);
-            if (iter < m_MaxIter)
-                ++m_Histogram[iter];
+#pragma omp parallel
+    {
+        size_t alloc_size = sizeof(int) * (m_MaxIter + 1);
+        int* histogram_private = (int*)_malloca(alloc_size);
+        ZeroMemory(histogram_private, alloc_size);
+    #pragma omp for 
+        for (int l = 0; l < height; ++l) {
+            const float* pIter = pIterations + width * l;
+            for (int k = 0; k < width; ++k) {
+                int iter = (int)floorf(*pIter);
+                iter = max(iter, 1);
+                if (iter < m_MaxIter)
+                    ++histogram_private[iter];
 
-            ++pIter;
+                ++pIter;
+            }
+        }
+    #pragma omp critical 
+        {
+            for (int i = 0; i < m_MaxIter; ++i)
+                m_Histogram[i] += histogram_private[i];
         }
     }
 
@@ -778,9 +788,9 @@ void CMandelbrotView::CreateColorTables()
         UINT b = 255;
 
         for (size_t i = 1; i <= m_MaxIter; ++i) {
-            r = (r + 5) & 0xFF;
-            g = (g + 7) & 0xFF;
-            b = (b - 5) & 0xFF;
+            r = (r + 3) & 0xFF;
+            g = (g + 5) & 0xFF;
+            b = (b - 3) & 0xFF;
             m_ColorTable32[i] = RGB(b, g, r);
         }
     }
