@@ -981,7 +981,13 @@ void CMandelbrotView::OnAnimatePalette()
     if (state & MF_CHECKED) {
         menu->CheckMenuItem(ID_VIEW_ANIMATEPALETTE, MF_UNCHECKED | MF_BYCOMMAND);
         m_AnimatePalette = false;
-        CreateColorTables(); // reset color tables
+        if (m_PaletteType == palHistogram) {
+            m_NeedToRecompute = true;
+        }
+        else {
+            CreateColorTables(); // reset color tables
+        }
+
         if (m_TimerID != 0) {
             KillTimer(m_TimerID);
             m_TimerID = 0;
@@ -993,7 +999,6 @@ void CMandelbrotView::OnAnimatePalette()
         m_TimerID = SetTimer(1, 70, NULL); // timer causes WM_TIMER message
     }
 
-    m_NeedToRecompute = false;
     Invalidate(FALSE);
 }
 
