@@ -43,7 +43,7 @@
 //#define PROFILING 1
 
 #ifdef FLOAT128_DEBUG
-#define MAX_ZOOM (1ull<<1)   // for debug purposes
+#define MAX_ZOOM 0   // for debug purposes
 #else
 #define MAX_ZOOM (1ull<<44)
 #endif
