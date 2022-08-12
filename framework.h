@@ -28,6 +28,7 @@
 
 #include <afxwin.h>             // MFC core and standard components
 #include <afxcontrolbars.h>     // MFC support for ribbons and control bars
+#include <assert.h>
 
 #ifdef _UNICODE
     #if defined _M_IX86

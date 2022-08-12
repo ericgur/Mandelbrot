@@ -105,6 +105,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND(ID_VIEW_ANIMATEPALETTE, &CMandelbrotView::OnAnimatePalette)
     ON_COMMAND_RANGE(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnPaletteChange)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
+    ON_COMMAND_RANGE(ID_PRECISION_AUTO, ID_PRECISION_FLOAT128, &CMandelbrotView::OnPrecisionSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
     ON_COMMAND(ID_VIEW_SMOOTHCOLORTRANSITION, &CMandelbrotView::OnSmoothColorTransitions)
     ON_WM_ENTERSIZEMOVE()
@@ -130,6 +131,8 @@ CMandelbrotView::CMandelbrotView()
     m_IsResizing = false;
     m_AnimatePalette = false;
     m_TimerID = 0;
+    m_Precision = prAuto;
+    m_HsvOffset = 0;
 
     //fill bitmap header
     memset(&m_BmpInfo, 0, sizeof(m_BmpInfo));
@@ -142,8 +145,8 @@ CMandelbrotView::CMandelbrotView()
 
     //init color table
     m_PaletteType = palGradient;
-    CreateColorTables();
     m_NeedToRecompute = true;
+    CreateColorTables();
 
     LARGE_INTEGER li;
     QueryPerformanceFrequency(&li);
@@ -188,40 +191,11 @@ void CMandelbrotView::OnExitSizeMove()
     Invalidate(FALSE);
 }
 
-
-void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int height)
+void CMandelbrotView::CreateColorTableFromHistogram(float offset)
 {
-    if (m_Histogram)
-        delete[] m_Histogram;
-
-    m_Histogram = new int[m_MaxIter + 2];
-    ZeroMemory(m_Histogram, sizeof(int) * (m_MaxIter + 2));
-    float* hues = new float[m_MaxIter + 1];
-    ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1));
-
-#pragma omp parallel
-    {
-        size_t alloc_size = sizeof(int) * (m_MaxIter + 1);
-        int* histogram_private = (int*)_malloca(alloc_size);
-        ZeroMemory(histogram_private, alloc_size);
-    #pragma omp for 
-        for (int l = 0; l < height; ++l) {
-            const float* pIter = pIterations + width * l;
-            for (int k = 0; k < width; ++k) {
-                int iter = (int)floorf(*pIter);
-                iter = max(iter, 1);
-                if (iter < m_MaxIter)
-                    ++histogram_private[iter];
-
-                ++pIter;
-            }
-        }
-    #pragma omp critical 
-        {
-            for (int i = 0; i < m_MaxIter; ++i)
-                m_Histogram[i] += histogram_private[i];
-        }
-    }
+    size_t hist_size = m_MaxIter + 1ull;
+    float* hues = new float[hist_size];
+    ZeroMemory(hues, sizeof(float) * hist_size);
 
     // normalize the iterations
     int total = 0;
@@ -238,7 +212,7 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
 
     // create HSV to COLORREF table
     for (int i = 0; i <= m_MaxIter; ++i) {
-        float h = hues[i] * 6;
+        float h = offset + hues[i] * 6;
         float x = (1.0f - abs(fmodf(h, 2) - 1.0f));
         switch ((int)floorf(h) % 6) {
         case 0: // 0-60 
@@ -265,6 +239,50 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
     }
 
     delete[] hues;
+}
+
+
+void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int height)
+{
+    if (m_Histogram != nullptr)
+        delete[] m_Histogram;
+    const size_t hist_size = m_MaxIter + 2ull;
+    m_Histogram = new int[hist_size];
+    ZeroMemory(m_Histogram, sizeof(int) * hist_size);
+    bool error = false;
+
+#pragma omp parallel
+    {
+        // thread local variables.
+        size_t alloc_size = sizeof(int) * hist_size;
+        int* histogram_private = new int[alloc_size];
+        if (histogram_private == nullptr) {
+            assert(histogram_private != nullptr);
+            error = true;
+        }
+        else {
+            ZeroMemory(histogram_private, alloc_size);
+        #pragma omp for 
+            for (int l = 0; l < height; ++l) {
+                const float* pIter = pIterations + width * l;
+                for (int k = 0; k < width; ++k) {
+                    int iter = (int)floorf(*pIter);
+                    iter = max(iter, 1);
+                    if (iter < m_MaxIter)
+                        ++histogram_private[iter];
+
+                    ++pIter;
+                }
+            }
+        #pragma omp critical 
+            {
+                for (int i = 0; i < m_MaxIter; ++i)
+                    m_Histogram[i] += histogram_private[i];
+                delete[] histogram_private;
+            }
+        }
+    }
+
 }
 
 
@@ -551,15 +569,18 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         if (m_SetType == stJulia)             {
             cr = m_JuliaCr, ci = m_JuliaCi;
         }
-        if (m_zoom > MAX_ZOOM) {
-            DrawImageFixedPoint128(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+
+        bool useDoublePrecision = (m_Precision == prDouble) || (m_Precision == prAuto && m_zoom <= MAX_ZOOM);
+        if (useDoublePrecision) {
+            DrawImageDouble(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
         else {
-            DrawImageDouble(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageFixedPoint128(m_Iterations, width, height, m_xmin, dx, m_ymin, dy, cr, ci);
         }
 
         if (palHistogram == m_PaletteType) {
             CreateHistogram(m_Iterations, width, height);
+            CreateColorTableFromHistogram(m_HsvOffset);
         }
 
         //all done
@@ -573,7 +594,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         else
             title.Format(L"Zoom x%0.0lf (%ims)", m_zoom, totalTime);
 
-        title += (m_zoom > MAX_ZOOM) ? L" using high precision (slow)" : L" using double precision";
+        title += (useDoublePrecision) ? L" using double precision" : L" using high precision (slow)";
         ((CFrameWnd*)AfxGetMainWnd())->SetWindowText(title);
         m_NeedToRecompute = false;
     }
@@ -748,7 +769,7 @@ void CMandelbrotView::CreateColorTables()
     if (m_ColorTable32)
         delete[] m_ColorTable32;
 
-    m_ColorTable32 = new COLORREF[m_MaxIter + 2];
+    m_ColorTable32 = new COLORREF[m_MaxIter + 1];
     if (m_PaletteType == palGrey) {
         for (size_t i = 1; i <= m_MaxIter; ++i) {
             int c = 255 - (int)(215.0f * (float)i / (float)m_MaxIter);
@@ -894,6 +915,33 @@ void CMandelbrotView::OnPaletteChange(UINT nID)
 }
 
 
+void CMandelbrotView::OnPrecisionSelect(UINT nID)
+{
+    if (nID < ID_PRECISION_AUTO || nID > ID_PRECISION_FLOAT128) {
+        CString str;
+        str.Format(L"OnPrecisionSelect: Invalid nID received as argument: %d\n", nID);
+        OutputDebugString(str);
+    }
+
+    CMenu* menu = AfxGetMainWnd()->GetMenu();
+    menu->CheckMenuRadioItem(ID_PRECISION_AUTO, ID_PRECISION_FLOAT128, nID, MF_BYCOMMAND);
+    auto precision = m_Precision;
+    switch (nID) {
+    case ID_PRECISION_AUTO:
+        m_Precision = prAuto; break;
+    case ID_PRECISION_DOUBLE:
+        m_Precision = prDouble; break;
+    case ID_PRECISION_FLOAT128:
+        m_Precision = prFixedPoint128; break;
+    }
+
+    if (m_Precision != precision) {
+        m_NeedToRecompute = true;
+        Invalidate(FALSE);
+    }
+}
+
+
 /**
  * @brief Callback for ID_FILE_SAVE_IMAGE menu item. Save the image to disk. Uses Same X coordinates but modifies the Y coordinates to fit the resolution.
 */
@@ -944,15 +992,15 @@ void CMandelbrotView::OnFileSaveImage(UINT nID)
         cr = m_JuliaCr, ci = m_JuliaCi;
     }
 
-    if (m_zoom > MAX_ZOOM) {
-        DrawImageFixedPoint128(pIterations, width, height, m_xmin, dx, ymax, -dx, cr, ci);
-    }
-    else {
+    bool useDoublePrecision = (m_Precision == prDouble) || (m_Precision == prAuto && m_zoom <= MAX_ZOOM);
+    if (useDoublePrecision) {
         DrawImageDouble(pIterations, width, height, m_xmin, dx, ymax, -dx, cr, ci);
     }
-
+    else {
+        DrawImageFixedPoint128(pIterations, width, height, m_xmin, dx, ymax, -dx, cr, ci);
+    }
+    
     CreateDibFromIterations(pBits, pIterations, width, height);
-
     HRESULT hr = image.Save(filename, Gdiplus::ImageFormatPNG);
     if (!SUCCEEDED(hr)) { 
         AfxMessageBox(L"Failed to save image", MB_ICONINFORMATION);
@@ -988,11 +1036,12 @@ void CMandelbrotView::OnAnimatePalette()
     CMenu* menu = AfxGetMainWnd()->GetMenu();
     UINT state = menu->GetMenuState(ID_VIEW_ANIMATEPALETTE, MF_BYCOMMAND);
 
-    if (state & MF_CHECKED) {
+    if (state & MF_CHECKED) { // this is the old state
         menu->CheckMenuItem(ID_VIEW_ANIMATEPALETTE, MF_UNCHECKED | MF_BYCOMMAND);
         m_AnimatePalette = false;
         if (m_PaletteType == palHistogram) {
-            m_NeedToRecompute = true;
+            m_HsvOffset = 0;
+            CreateColorTableFromHistogram(m_HsvOffset);
         }
         else {
             CreateColorTables(); // reset color tables
@@ -1024,15 +1073,21 @@ void CMandelbrotView::OnTimer(UINT_PTR nIDEvent)
     // roll the m_ColorTable32 values
     if (nIDEvent == m_TimerID) {
         COLORREF* pBuff = new COLORREF[m_MaxIter + 1];
-        for (int i = 1; i < m_MaxIter; ++i) {
-            pBuff[i] = m_ColorTable32[i + 1];
+        if (m_PaletteType == palHistogram) {
+            m_HsvOffset += 0.1f;
+            CreateColorTableFromHistogram(m_HsvOffset);
         }
-        pBuff[0] = m_ColorTable32[0];
-        pBuff[m_MaxIter] = m_ColorTable32[1];
+        else {
+            for (int i = 1; i < m_MaxIter; ++i) {
+                pBuff[i] = m_ColorTable32[i + 1];
+            }
+            pBuff[0] = m_ColorTable32[0];
+            pBuff[m_MaxIter] = m_ColorTable32[1];
 
-        // Note - since using WM_TIMER message (always on the main thread), there's no need to protect with a mutex.
-        delete[] m_ColorTable32;
-        m_ColorTable32 = pBuff;
+            // Note - since using WM_TIMER message (always on the main thread), there's no need to protect with a mutex.
+            delete[] m_ColorTable32;
+            m_ColorTable32 = pBuff;
+        }
         Invalidate(FALSE);
     }
 }

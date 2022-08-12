@@ -46,6 +46,12 @@ enum set_type_t
     stCount
 };
 
+enum precision_t
+{
+    prAuto,
+    prDouble,
+    prFixedPoint128
+};
 
 class CMandelbrotView : public CView
 {
@@ -84,6 +90,7 @@ protected:
     COLORREF* m_ColorTable32;
     COLORREF* m_BmpBits;
     int* m_Histogram;
+    float m_HsvOffset;
     float* m_Iterations;
     double m_Frequency;
     bool m_NeedToRecompute;
@@ -94,11 +101,13 @@ protected:
     bool m_IsResizing;
     bool m_AnimatePalette;
     UINT_PTR m_TimerID;
+    precision_t m_Precision;
 
     // Set default values for zoom and coords
     void SetDefaultValues();
     void SetAspectRatio();
     void CreateColorTables();
+    void CreateColorTableFromHistogram(float offset);
     void CreateHistogram(const float* pIterations, int width, int height);
     void DrawImageDouble(float* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
     void DrawImageFixedPoint128(float* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
@@ -117,6 +126,7 @@ protected:
     afx_msg void OnIterationChange(UINT nID);
     afx_msg void OnFileSaveImage(UINT nID);
     afx_msg void OnPaletteChange(UINT nID);
+    afx_msg void OnPrecisionSelect(UINT nID);
     afx_msg void OnResetView();
     afx_msg void OnAnimatePalette();
     afx_msg void OnSmoothColorTransitions();

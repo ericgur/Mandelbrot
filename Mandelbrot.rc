@@ -207,6 +207,12 @@ BEGIN
     POPUP "&View",                          65535,MFT_STRING,MFS_ENABLED
     BEGIN
         MENUITEM "&Status Bar",                 ID_VIEW_STATUS_BAR,MFT_STRING,MFS_ENABLED
+        POPUP "Precision",                      65535,MFT_STRING,MFS_ENABLED
+        BEGIN
+            MENUITEM "Auto",                        ID_PRECISION_AUTO,MFT_STRING,MFS_ENABLED
+            MENUITEM "Double",                      ID_PRECISION_DOUBLE,MFT_STRING,MFS_ENABLED
+            MENUITEM "Float128",                    ID_PRECISION_FLOAT128,MFT_STRING,MFS_ENABLED
+        END
         MENUITEM MFT_SEPARATOR
         MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
         MENUITEM "Gradients",                   ID_VIEW_GRADIENTS,MFT_STRING,MFS_ENABLED
@@ -215,6 +221,7 @@ BEGIN
         MENUITEM MFT_SEPARATOR
         MENUITEM "Smooth Color Transition",     ID_VIEW_SMOOTHCOLORTRANSITION,MFT_STRING,MFS_ENABLED
         MENUITEM "Animate Palette",             ID_VIEW_ANIMATEPALETTE,MFT_STRING,MFS_ENABLED
+        MENUITEM MFT_SEPARATOR
         MENUITEM "Reset View",                  ID_VIEW_RESETVIEW,MFT_STRING,MFS_ENABLED
     END
     POPUP "Set Type",                       65535,MFT_STRING,MFS_ENABLED
