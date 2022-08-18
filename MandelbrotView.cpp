@@ -193,9 +193,8 @@ void CMandelbrotView::OnExitSizeMove()
 
 void CMandelbrotView::CreateColorTableFromHistogram(float offset)
 {
-    size_t hist_size = m_MaxIter + 1ull;
-    float* hues = new float[hist_size];
-    ZeroMemory(hues, sizeof(float) * hist_size);
+    float* hues = new float[m_MaxIter + 1ull];
+    ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1ull));
 
     // normalize the iterations
     int total = 0;
@@ -246,22 +245,21 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
 {
     if (m_Histogram != nullptr)
         delete[] m_Histogram;
-    const size_t hist_size = m_MaxIter + 2ull;
-    m_Histogram = new int[hist_size];
-    ZeroMemory(m_Histogram, sizeof(int) * hist_size);
+
+    m_Histogram = new int[m_MaxIter + 1ull];
+    ZeroMemory(m_Histogram, sizeof(int) * (m_MaxIter + 1ull));
     bool error = false;
 
 #pragma omp parallel
     {
         // thread local variables.
-        size_t alloc_size = sizeof(int) * hist_size;
-        int* histogram_private = new int[alloc_size];
+        int* histogram_private = new int[m_MaxIter + 1ull];
         if (histogram_private == nullptr) {
             assert(histogram_private != nullptr);
             error = true;
         }
         else {
-            ZeroMemory(histogram_private, alloc_size);
+            ZeroMemory(histogram_private, sizeof(int) * (m_MaxIter + 1ull));
         #pragma omp for 
             for (int l = 0; l < height; ++l) {
                 const float* pIter = pIterations + width * l;
