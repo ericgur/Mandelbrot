@@ -310,7 +310,6 @@ public:
         low(l), high(h) ,sign(s) {
         FP128_ASSERT(sign < 2);
     }
-
     /**
      * @brief Assignment operator
      * @param other Object to copy from 
@@ -340,14 +339,19 @@ public:
             // shift left by I2 - I bits
             int shift = I2 - I;
             low = other.low << shift;
-            high = shift_right128(other.low, other.high, (uint8)(64 - shift));
+            high = shift_left128(other.low, other.high, (uint8)(64 - shift));
         }
         // other has more integer bits and less fraction bits
         else { // I > I2
             // shift right by I - I2 bits
             int shift = I - I2;
+            bool need_rounding = (other.low & (1ull << (shift - 1))) != 0;
             low = shift_right128(other.low, other.high, (uint8)shift);
             high = other.high >> shift;
+            if (need_rounding) {
+                ++low;
+                high += low == 0;
+            }
         }
 
         return *this;
@@ -414,46 +418,18 @@ public:
         return (sign) ? -res : res;
     }
     /**
-     * @brief operator std::string - converts to a std::string (slow)
-     *                 string holds all fraction bits.
+     * @brief Converts to a std::string (slow) string holds all meaningful fraction bits.
      * @return object string representation
     */
     FP128_INLINE operator std::string() const {
-        char str[128]; // need roughly a (meaningful) digit per 3.2 bits
-        
-        char* p = str;
-        fixed_point128 temp = *this;
-        
-        //number is negative
-        if (temp.sign)
-            *p++ = '-';
-
-        uint64 integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
-        p += snprintf(p, sizeof(str) + p - str, "%llu", integer);
-        temp.high &= ~int_mask; // remove the integer part
-        // check if temp has additional digits (not zero)
-        if (temp) {
-            *p++ = '.';
-        }
-        // the faster way, requires temp *= 10 not overflowing
-        int digits = 0;
-        while (digits++ < max_frac_digits && temp) {
-            if constexpr (I < 4) {
-                uint64 res[2];
-                res[0] = _umul128(high, 10ull, &res[1]); // multiply by 10
-                // extract the integer part
-                integer = shift_right128(res[0], res[1], upper_frac_bits);
-                temp *= 10; // move another digit to the integer area
-            }
-            else {
-                temp *= 10; // move another digit to the integer area
-                integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
-            }
-            *p++ = '0' + (char)integer;
-            temp.high &= ~int_mask;
-        }
-        *p = '\0';
-        return str;
+        return fp2s();
+    }
+    /**
+     * @brief Converts to a C string (slow) string holds all meaningful fraction bits.
+     * @return object string representation
+    */
+    explicit FP128_INLINE operator char*() const {
+        return fp2s();
     }
     //
     // math operators
@@ -662,7 +638,7 @@ public:
         high = shift_right128(res[index+1], res[index + 2], lsb);
 
         if (need_rounding) {
-            low += 1;
+            ++low;
             high += low == 0;
         }
         // set the sign
@@ -753,9 +729,17 @@ public:
         uint64 denom[2] = {other.low, other.high};
         uint64 q[4] = {0}, *r = nullptr; // don't need the reminder
         if (0 == div_32bit((uint32*)q, (uint32*)r, (uint32*)nom, (uint32*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
-            // result in q needs to shift left by F
+            static constexpr uint64 half = 1ull << (I - 1);  // used for rounding
+            bool need_rounding = (q[0] & half) != 0;
+            // result in q needs to shifted left by F
+            // shifting right by 128-F is simpler.
             high = shift_right128(q[1], q[2], I);
             low = shift_right128(q[0], q[1], I);
+            if (need_rounding) {
+                ++low;
+                high += low == 0;
+            }
+
             sign ^= other.sign;
             // set sign to 0 when both low and high are zero (avoid having negative zero value)
             sign &= (0 != low || 0 != high);
@@ -838,14 +822,14 @@ public:
     FP128_INLINE fixed_point128& operator>>=(int32 shift) {
         // 0-64 bit shift - most common
         if (shift <= 64) {
-            low = shift_right128(low, high, (uint8)shift);
+            low = shift_right128_round(low, high, (uint8)shift);
             high >>= shift;
         }
         else if (shift >= 128) {
             low = high = 0;
         }
         else if (shift >= 64) {
-            low = high >> (shift - 64);
+            low = shift_right64_round(high, shift - 64);
             high = 0;
         }
         // set sign to 0 when both low and high are zero (avoid having negative zero value)
@@ -1137,6 +1121,49 @@ public:
 
 private:
     /**
+     * @brief Converts this obejct to a C string.
+     * The returned string is a statically thread-allocated buffer.
+     * Additional calls to this function from the same thread, overwrite the previosu result.
+     * @return C string with describing the value of the object.
+    */
+    FP128_INLINE char* fp2s() const {
+        static thread_local char str[128]; // need roughly a (meaningful) digit per 3.2 bits
+
+        char* p = str;
+        fixed_point128 temp = *this;
+
+        //number is negative
+        if (temp.sign)
+            *p++ = '-';
+
+        uint64 integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
+        p += snprintf(p, sizeof(str) + p - str, "%llu", integer);
+        temp.high &= ~int_mask; // remove the integer part
+        // check if temp has additional digits (not zero)
+        if (temp) {
+            *p++ = '.';
+        }
+        // the faster way, requires temp *= 10 not overflowing
+        int digits = 0;
+        while (digits++ < max_frac_digits && temp) {
+            if constexpr (I < 4) {
+                uint64 res[2];
+                res[0] = _umul128(high, 10ull, &res[1]); // multiply by 10
+                // extract the integer part
+                integer = shift_right128_round(res[0], res[1], upper_frac_bits);
+                temp *= 10; // move another digit to the integer area
+            }
+            else {
+                temp *= 10; // move another digit to the integer area
+                integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
+            }
+            *p++ = '0' + (char)integer;
+            temp.high &= ~int_mask;
+        }
+        *p = '\0';
+        return str;
+    }
+    /**
      * @brief Adds 2 fixed_point128 objects of the same sign. Throws exception otherwise. this = this + other.
      * @param other The right side of the addition operation
      * @return This object.
@@ -1180,9 +1207,22 @@ private:
         sign &= (0 != low || 0 != high);
         return *this;
     }
-
     /**
-     * @brief Right shift a 128 bit ineteger.
+     * @brief shift right 'x' by 'shift' bits with rounding
+     * Undefiend behavior when shift is outside the range [0, 64]
+     * @param x value to shift
+     * @param shift how many bits to shift
+     * @return result of 'x' right shifed by 'shift'. 
+    */
+    static inline uint64 shift_right64_round(uint64 x, int shift)
+    {
+        if (x < 1 || x > 63)
+            return x;
+        x += 1ull << (shift - 1);
+        return x >> shift;
+    }
+    /**
+     * @brief Right shift a 128 bit integer.
      * @param l Low QWORD
      * @param h High QWORD
      * @param shift Bits to shift
@@ -1193,7 +1233,19 @@ private:
         return (l >> shift) | (h << (64 - shift));
     }
     /**
-     * @brief Left shift a 128 bit ineteger.
+     * @brief Right shift a 128 bit integer with rounding.
+     * @param l Low QWORD
+     * @param h High QWORD
+     * @param shift Bits to shift
+     * @return Lower 64 bit of the result
+    */
+    static inline uint64 shift_right128_round(uint64 l, uint64 h, int shift)
+    {   
+        bool need_rounding = (l & 1ull << (shift - 1)) != 0;
+        return need_rounding + ((l >> shift) | (h << (64 - shift)));
+    }
+    /**
+     * @brief Left shift a 128 bit integer.
      * @param l Low QWORD
      * @param h High QWORD
      * @param shift Bits to shift
@@ -1332,44 +1384,52 @@ public:
 
         return t;
     }
+    /**
+     * @brief factorial reciprocal (inverse). Calculates 1 / x!
+     * Maximum value of x that may produce non zero values is 34. 
+     * This value depends on the amount of fraction bits.
+     * @param x Input value
+     * @param res Result of the function
+     * @return void
+    */
     friend FP128_INLINE void fact_reciprocal(int x, fixed_point128& res) noexcept
     {
         static const fixed_point128 c[] = {
-            fixed_point128(0),
-            fixed_point128(1),                                           // 1 /  1!
-            fixed_point128(0.5),                                         // 1 /  2!
-            fixed_point128("0.166666666666666666666666666666666666667"), // 1 /  3!
-            fixed_point128("0.041666666666666666666666666666666666667"), // 1 /  4!
-            fixed_point128("0.008333333333333333333333333333333333333"), // 1 /  5!
-            fixed_point128("0.001388888888888888888888888888888888889"), // 1 /  6!
-            fixed_point128("0.000198412698412698412698412698412698413"), // 1 /  7!
-            fixed_point128("0.000024801587301587301587301587301587302"), // 1 /  8!
-            fixed_point128("0.000002755731922398589065255731922398589"), // 1 /  9!
-            fixed_point128("0.000000275573192239858906525573192239859"), // 1 / 10!
-            fixed_point128("0.000000025052108385441718775052108385442"), // 1 / 11!
-            fixed_point128("0.000000002087675698786809897921009032120"), // 1 / 12!
-            fixed_point128("0.000000000160590438368216145993923771702"), // 1 / 13!
-            fixed_point128("0.000000000011470745597729724713851697979"), // 1 / 14!
-            fixed_point128("0.000000000000764716373181981647590113199"), // 1 / 15!
-            fixed_point128("0.000000000000047794773323873852974382075"), // 1 / 16!
-            fixed_point128("0.000000000000002811457254345520763198946"), // 1 / 17!
-            fixed_point128("0.000000000000000156192069685862264622164"), // 1 / 18!
-            fixed_point128("0.000000000000000008220635246624329716956"), // 1 / 19!
-            fixed_point128("0.000000000000000000411031762331216485848"), // 1 / 20!
-            fixed_point128("0.000000000000000000019572941063391261231"), // 1 / 21!
-            fixed_point128("0.000000000000000000000889679139245057329"), // 1 / 22!
-            fixed_point128("0.000000000000000000000038681701706306840"), // 1 / 23!
-            fixed_point128("0.000000000000000000000001611737571096118"), // 1 / 24!
-            fixed_point128("0.000000000000000000000000064469502843845"), // 1 / 25!
-            fixed_point128("0.000000000000000000000000002479596263225"), // 1 / 26!
-            fixed_point128("0.000000000000000000000000000091836898638"), // 1 / 27!
-            fixed_point128("0.000000000000000000000000000003279889237"), // 1 / 28!
-            fixed_point128("0.000000000000000000000000000000113099628"), // 1 / 29!
-            fixed_point128("0.000000000000000000000000000000003769988"), // 1 / 30!
-            fixed_point128("0.000000000000000000000000000000000121613"), // 1 / 31!
-            fixed_point128("0.000000000000000000000000000000000003800"), // 1 / 32!
-            fixed_point128("0.000000000000000000000000000000000000115"), // 1 / 33!
-            fixed_point128("0.000000000000000000000000000000000000003")  // 1 / 34!
+            "0",                                         // place holder for faster/simpler access
+            "1",                                         // 1 /  1!
+            "0.5",                                       // 1 /  2!
+            "0.166666666666666666666666666666666666667", // 1 /  3!
+            "0.041666666666666666666666666666666666667", // 1 /  4!
+            "0.008333333333333333333333333333333333333", // 1 /  5!
+            "0.001388888888888888888888888888888888889", // 1 /  6!
+            "0.000198412698412698412698412698412698413", // 1 /  7!
+            "0.000024801587301587301587301587301587302", // 1 /  8!
+            "0.000002755731922398589065255731922398589", // 1 /  9!
+            "0.000000275573192239858906525573192239859", // 1 / 10!
+            "0.000000025052108385441718775052108385442", // 1 / 11!
+            "0.000000002087675698786809897921009032120", // 1 / 12!
+            "0.000000000160590438368216145993923771702", // 1 / 13!
+            "0.000000000011470745597729724713851697979", // 1 / 14!
+            "0.000000000000764716373181981647590113199", // 1 / 15!
+            "0.000000000000047794773323873852974382075", // 1 / 16!
+            "0.000000000000002811457254345520763198946", // 1 / 17!
+            "0.000000000000000156192069685862264622164", // 1 / 18!
+            "0.000000000000000008220635246624329716956", // 1 / 19!
+            "0.000000000000000000411031762331216485848", // 1 / 20!
+            "0.000000000000000000019572941063391261231", // 1 / 21!
+            "0.000000000000000000000889679139245057329", // 1 / 22!
+            "0.000000000000000000000038681701706306840", // 1 / 23!
+            "0.000000000000000000000001611737571096118", // 1 / 24!
+            "0.000000000000000000000000064469502843845", // 1 / 25!
+            "0.000000000000000000000000002479596263225", // 1 / 26!
+            "0.000000000000000000000000000091836898638", // 1 / 27!
+            "0.000000000000000000000000000003279889237", // 1 / 28!
+            "0.000000000000000000000000000000113099628", // 1 / 29!
+            "0.000000000000000000000000000000003769988", // 1 / 30!
+            "0.000000000000000000000000000000000121613", // 1 / 31!
+            "0.000000000000000000000000000000000003800", // 1 / 32!
+            "0.000000000000000000000000000000000000115", // 1 / 33!
+            "0.000000000000000000000000000000000000003"  // 1 / 34!
         };
         constexpr int series_len = array_length(c);
 
@@ -1379,7 +1439,6 @@ public:
         else {
             res = 0;
         }
-        
     }
     /**
      * @brief Calculate the sine function
@@ -1475,6 +1534,7 @@ public:
     }
 }; //class fixed_point128
 
+
 /**
  * @brief 32 bit words unsigned divide function. Variation of the code from the book Hacker's Delight.
  * @param q (output) Pointer to receive the quote
@@ -1516,7 +1576,7 @@ int32 div_32bit(uint32* q, uint32* r, const uint32* u, const uint32* v, int64 m,
     // Normalize by shifting v left just enough so that its high-order bit is on, and shift u left the same amount.
     // We may have to append a high-order digit on the dividend; we do that unconditionally.
     s = (uint64)__lzcnt(v[n - 1]); // 0 <= s <= 32. 
-    s_comp = 32 - s;
+    s_comp = 32 - s; // complementry of the shift value to 32
     
     vn = (uint32*)_malloca(sizeof(uint32) * n);
     if (nullptr == vn) return 1;
