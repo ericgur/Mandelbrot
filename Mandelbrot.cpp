@@ -39,7 +39,7 @@
 
 // CMandelbrotApp
 
-BEGIN_MESSAGE_MAP(CMandelbrotApp, CWinApp)
+BEGIN_MESSAGE_MAP(CMandelbrotApp, CWinAppEx)
     ON_COMMAND(ID_APP_ABOUT, OnAppAbout)
     // Standard file based document commands
     //ON_COMMAND(ID_FILE_NEW, CWinApp::OnFileNew)

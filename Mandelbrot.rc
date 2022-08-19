@@ -214,15 +214,15 @@ BEGIN
             MENUITEM "Float128",                    ID_PRECISION_FLOAT128,MFT_STRING,MFS_ENABLED
         END
         MENUITEM MFT_SEPARATOR
-        MENUITEM "&Grey Scale",                 ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
-        MENUITEM "Gradients",                   ID_VIEW_GRADIENTS,MFT_STRING,MFS_ENABLED
-        MENUITEM "Vivid Colors",                ID_VIEW_VIVIDCOLORS,MFT_STRING,MFS_ENABLED
-        MENUITEM "Histogram Coloring",          ID_VIEW_HISTOGRAMCOLORING,MFT_STRING,MFS_ENABLED
+        MENUITEM "&Grey Scale\t1",              ID_VIEW_GREYSCALE,MFT_STRING,MFS_ENABLED
+        MENUITEM "Gradients\t2",                ID_VIEW_GRADIENTS,MFT_STRING,MFS_ENABLED
+        MENUITEM "Vivid Colors\t3",             ID_VIEW_VIVIDCOLORS,MFT_STRING,MFS_ENABLED
+        MENUITEM "Histogram Coloring\t4",       ID_VIEW_HISTOGRAMCOLORING,MFT_STRING,MFS_ENABLED
         MENUITEM MFT_SEPARATOR
         MENUITEM "Smooth Color Transition",     ID_VIEW_SMOOTHCOLORTRANSITION,MFT_STRING,MFS_ENABLED
-        MENUITEM "Animate Palette",             ID_VIEW_ANIMATEPALETTE,MFT_STRING,MFS_ENABLED
+        MENUITEM "Animate Palette\tF5",         ID_VIEW_ANIMATEPALETTE,MFT_STRING,MFS_ENABLED
         MENUITEM MFT_SEPARATOR
-        MENUITEM "Reset View",                  ID_VIEW_RESETVIEW,MFT_STRING,MFS_ENABLED
+        MENUITEM "Reset View\tEsc",             ID_VIEW_RESETVIEW,MFT_STRING,MFS_ENABLED
     END
     POPUP "Set Type",                       65535,MFT_STRING,MFS_ENABLED
     BEGIN
@@ -250,20 +250,22 @@ END
 
 IDR_MAINFRAME ACCELERATORS
 BEGIN
-    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL
-    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL
-    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL
-    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL
-    "Z",            ID_EDIT_UNDO,           VIRTKEY, CONTROL
-    "X",            ID_EDIT_CUT,            VIRTKEY, CONTROL
-    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL
-    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL
-    VK_BACK,        ID_EDIT_UNDO,           VIRTKEY, ALT
-    VK_DELETE,      ID_EDIT_CUT,            VIRTKEY, SHIFT
-    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL
-    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT
-    VK_F6,          ID_NEXT_PANE,           VIRTKEY 
-    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT
+    "C",            ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    VK_INSERT,      ID_EDIT_COPY,           VIRTKEY, CONTROL, NOINVERT
+    "V",            ID_EDIT_PASTE,          VIRTKEY, CONTROL, NOINVERT
+    VK_INSERT,      ID_EDIT_PASTE,          VIRTKEY, SHIFT, NOINVERT
+    "N",            ID_FILE_NEW,            VIRTKEY, CONTROL, NOINVERT
+    "O",            ID_FILE_OPEN,           VIRTKEY, CONTROL, NOINVERT
+    "P",            ID_FILE_PRINT,          VIRTKEY, CONTROL, NOINVERT
+    "S",            ID_FILE_SAVE,           VIRTKEY, CONTROL, NOINVERT
+    VK_F6,          ID_NEXT_PANE,           VIRTKEY, NOINVERT
+    VK_F6,          ID_PREV_PANE,           VIRTKEY, SHIFT, NOINVERT
+    VK_F5,          ID_VIEW_ANIMATEPALETTE, VIRTKEY, NOINVERT
+    VK_ESCAPE,      ID_VIEW_RESETVIEW,      VIRTKEY, NOINVERT
+    "1",            ID_VIEW_GREYSCALE,      ASCII,  NOINVERT
+    "2",            ID_VIEW_GRADIENTS,      ASCII,  NOINVERT
+    "3",            ID_VIEW_VIVIDCOLORS,    ASCII,  NOINVERT
+    "4",            ID_VIEW_HISTOGRAMCOLORING, ASCII, NOINVERT
 END
 
 

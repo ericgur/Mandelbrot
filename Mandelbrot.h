@@ -37,7 +37,7 @@
 // See Mandelbrot.cpp for the implementation of this class
 //
 
-class CMandelbrotApp : public CWinApp
+class CMandelbrotApp : public CWinAppEx
 {
 public:
     CMandelbrotApp();
