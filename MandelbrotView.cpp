@@ -169,6 +169,11 @@ CMandelbrotView::~CMandelbrotView()
 }
 
 
+/**
+ * @brief Modies the windows class or style
+ * @param cs CREATESTRUCT defaults
+ * @return 0 for succes.
+*/
 BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 {
     // TODO: Modify the Window class or styles here by modifying
@@ -178,12 +183,35 @@ BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 }
 
 
+/**
+ * @brief Called when the window is created
+ * @param lpCreateStruct Pointer to CREATESTRUCT.
+ * @return 0 for succes.
+*/
+int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
+{
+    if (CView::OnCreate(lpCreateStruct) == -1)
+        return -1;
+
+    SetDefaultValues();
+    Invalidate(FALSE);
+    return 0;
+}
+
+
+/**
+ * @brief Called when the window begins sizing
+*/
 void CMandelbrotView::OnEnterSizeMove()
 { 
     m_IsResizing = true; 
 }
 
 
+/**
+ * @brief Called when the window stops sizing
+ * Stops the palette animation if it's active.
+*/
 void CMandelbrotView::OnExitSizeMove() 
 { 
     m_IsResizing = false; 
@@ -191,6 +219,11 @@ void CMandelbrotView::OnExitSizeMove()
     Invalidate(FALSE);
 }
 
+
+/**
+ * @brief Fills the color table with colors based on a histogram.
+ * @param offset offsewt the hue, used when animating the color palette.
+*/
 void CMandelbrotView::CreateColorTableFromHistogram(float offset)
 {
     float* hues = new float[m_MaxIter + 1ull];
@@ -241,6 +274,12 @@ void CMandelbrotView::CreateColorTableFromHistogram(float offset)
 }
 
 
+/**
+ * @brief Creates a histogram of the iteration count of each pixel.
+ * @param pIterations Pointer to the buffer holding the iterations
+ * @param width Width of the image (pixels)
+ * @param height Height of the image (pixels)
+*/
 void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int height)
 {
     if (m_Histogram != nullptr)
@@ -280,10 +319,17 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
             }
         }
     }
-
 }
 
 
+/**
+ * @brief Creates a Device Independent Bitmap (DIB) from the iteration data of each pixel.
+ * The palette used is pre-calculated.
+ * @param pBits Pointer to the output 32 bit bitmap
+ * @param pIterations Pointer to the buffer holding the iterations
+ * @param width Width of the image (pixels)
+ * @param height Height of the image (pixels)
+*/
 void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
 {
 
@@ -331,6 +377,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
     OutputDebugString(text);
 #endif
 }
+
 
 /**
  * @brief Draw the Mandelbrot image on a DIB surface - uses high precision fixed point
@@ -506,6 +553,7 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
     delete[] xTable;
 }
 
+
 /**
  * @brief Callback to redraw the image
  * @param pDC - device context
@@ -604,6 +652,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     SetDIBitsToDevice((HDC)(*pDC), 0, 0, width, height, 0, 0, 0, height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
 }
 
+
 /**
  * @brief Sets the default coordinates of the initial view
 */
@@ -645,27 +694,6 @@ void CMandelbrotView::SetAspectRatio()
 }
 
 
-// CMandelbrotView diagnostics
-
-#ifdef _DEBUG
-void CMandelbrotView::AssertValid() const
-{
-    CView::AssertValid();
-}
-
-
-void CMandelbrotView::Dump(CDumpContext& dc) const
-{
-    CView::Dump(dc);
-}
-
-
-CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inline
-{
-    ASSERT(m_pDocument->IsKindOf(RUNTIME_CLASS(CMandelbrotDoc)));
-    return (CMandelbrotDoc*)m_pDocument;
-}
-#endif //_DEBUG
 
 void CMandelbrotView::OnZoomChange(CPoint& point, double zoomMultiplier)
 {
@@ -818,19 +846,9 @@ void CMandelbrotView::CreateColorTables()
 }
 
 
-int CMandelbrotView::OnCreate(LPCREATESTRUCT lpCreateStruct)
-{
-    if (CView::OnCreate(lpCreateStruct) == -1)
-        return -1;
-
-    SetDefaultValues();
-    Invalidate(FALSE);
-    return 0;
-}
-
 /**
  * @brief - callback when user selects Mandelbrot or Julia sets
- * @param nID - resource ID of the menu item
+ * @param nID Resource ID of the menu item selected.
 */
 void CMandelbrotView::OnSetTypeSelect(UINT nID)
 {
@@ -864,7 +882,7 @@ void CMandelbrotView::OnSetTypeSelect(UINT nID)
 
 /**
  * @brief Callback for menu->iteration selection change. Changes the iteration count and initiates a redraw of the image
- * @param nID Resource ID of the menu item selected
+ * @param nID Resource ID of the menu item selected.
 */
 void CMandelbrotView::OnIterationChange(UINT nID)
 {
@@ -885,6 +903,10 @@ void CMandelbrotView::OnIterationChange(UINT nID)
 }
 
 
+/**
+ * @brief Called when the user selects a new palette option.
+ * @param nID Resource ID of the menu item selected.
+*/
 void CMandelbrotView::OnPaletteChange(UINT nID)
 {
     if (nID < ID_VIEW_GREYSCALE || nID > ID_VIEW_HISTOGRAMCOLORING) {
@@ -913,6 +935,10 @@ void CMandelbrotView::OnPaletteChange(UINT nID)
 }
 
 
+/**
+ * @brief Called when the user selects a new precision (double/fixed_point128/auto) from the View->precision menu.
+ * @param nID Resource ID of the menu item selected.
+*/
 void CMandelbrotView::OnPrecisionSelect(UINT nID)
 {
     if (nID < ID_PRECISION_AUTO || nID > ID_PRECISION_FLOAT128) {
@@ -1007,6 +1033,7 @@ void CMandelbrotView::OnFileSaveImage(UINT nID)
     delete[] pIterations;
 }
 
+
 /**
  * @brief Callback for ID_SETTYPE_CHOOSEJULIACONSTANT, triggers a dialog that allows the user to select a new Julia set constant.
 */
@@ -1059,6 +1086,7 @@ void CMandelbrotView::OnAnimatePalette()
     Invalidate(FALSE);
 }
 
+
 /**
  * @brief Callback for WM_TIMER events.
  * @param nIDEvent Timer ID
@@ -1090,6 +1118,7 @@ void CMandelbrotView::OnTimer(UINT_PTR nIDEvent)
     }
 }
 
+
 /**
  * @brief Callback for ID_VIEW_SMOOTHCOLORTRANSITION, select linear interpolation of colors.
 */
@@ -1110,3 +1139,26 @@ void CMandelbrotView::OnSmoothColorTransitions()
     m_NeedToRecompute = true;
     Invalidate(FALSE);
 }
+
+
+// CMandelbrotView diagnostics
+
+#ifdef _DEBUG
+void CMandelbrotView::AssertValid() const
+{
+    CView::AssertValid();
+}
+
+
+void CMandelbrotView::Dump(CDumpContext& dc) const
+{
+    CView::Dump(dc);
+}
+
+
+CMandelbrotDoc* CMandelbrotView::GetDocument() const // non-debug version is inline
+{
+    ASSERT(m_pDocument->IsKindOf(RUNTIME_CLASS(CMandelbrotDoc)));
+    return (CMandelbrotDoc*)m_pDocument;
+}
+#endif //_DEBUG
