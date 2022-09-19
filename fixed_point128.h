@@ -72,9 +72,66 @@ namespace fp128 {
 *                                  Utility Functions
 ************************************************************************************/
 
+/**
+ * @brief Calculates the element count of a C style array at build time
+ * Example:
+ * int a[5];
+ * constexpr int len = array_length(a); // returns 5 at build time
+ * @tparam T array type
+ * @param a array instance
+ * @return Element count in array
+*/
 template<typename T>
-constexpr int array_length(const T& a) {
+static constexpr uint32_t array_length(const T& a) {
     return sizeof(a) / sizeof(a[0]);
+}
+/**
+ * @brief shift right 'x' by 'shift' bits with rounding
+ * Undefiend behavior when shift is outside the range [0, 64]
+ * @param x value to shift
+ * @param shift how many bits to shift
+ * @return result of 'x' right shifed by 'shift'.
+*/
+FP128_INLINE  uint64_t shift_right64_round(uint64_t x, int shift)
+{
+    if (x < 1 || x > 63)
+        return x;
+    x += 1ull << (shift - 1);
+    return x >> shift;
+}
+/**
+ * @brief Right shift a 128 bit integer.
+ * @param l Low QWORD
+ * @param h High QWORD
+ * @param shift Bits to shift
+ * @return Lower 64 bit of the result
+*/
+FP128_INLINE static uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
+{
+    return (l >> shift) | (h << (64 - shift));
+}
+/**
+ * @brief Right shift a 128 bit integer with rounding.
+ * @param l Low QWORD
+ * @param h High QWORD
+ * @param shift Bits to shift
+ * @return Lower 64 bit of the result
+*/
+FP128_INLINE static uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift)
+{
+    const bool need_rounding = (l & 1ull << (shift - 1)) != 0;
+    return need_rounding + ((l >> shift) | (h << (64 - shift)));
+}
+/**
+ * @brief Left shift a 128 bit integer.
+ * @param l Low QWORD
+ * @param h High QWORD
+ * @param shift Bits to shift
+ * @return Upper 64 bit of the result
+*/
+FP128_INLINE static uint64_t shift_left128(uint64_t l, uint64_t h, int shift)
+{
+    return (h << shift) | (l >> (64 - shift));
 }
 
 /***********************************************************************************
@@ -322,7 +379,7 @@ public:
     */
     fixed_point128(uint64_t l, uint64_t h, uint32_t s) noexcept:
         low(l), high(h) ,sign(s) {
-        FP128_ASSERT(sign < 2);
+        sign = (sign != 0);
     }
     
     /**
@@ -636,6 +693,10 @@ public:
      * @return This object.
     */
     FP128_INLINE fixed_point128& operator*=(const fixed_point128& other) noexcept{
+        // Temporary arrays to store the result. They are uninitialzied to get 10-50% extra performance.
+        // Zero initialization is a 10% penalty and using a thread_local static varible lowers
+        //  performance by >50%.
+
         uint64_t res[4]; // 256 bit of result
         uint64_t temp1[2], temp2[2];
         unsigned char carry;
@@ -755,28 +816,47 @@ public:
      * @return this object.
     */
     inline fixed_point128& operator/=(const fixed_point128& other) {
-        uint64_t nom[4] = {0, 0, low, high};
-        uint64_t denom[2] = {other.low, other.high};
-        uint64_t q[4] = {0}, *r = nullptr; // don't need the reminder
-        if (0 == div_32bit((uint32_t*)q, (uint32_t*)r, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
-            static constexpr uint64_t half = 1ull << (I - 1);  // used for rounding
-            const bool need_rounding = (q[0] & half) != 0;
-            // result in q needs to shifted left by F
-            // shifting right by 128-F is simpler.
-            high = shift_right128(q[1], q[2], I);
-            low = shift_right128(q[0], q[1], I);
-            if (need_rounding) {
-                ++low;
-                high += low == 0;
-            }
+        uint64_t q[4]{}; 
+        bool need_rounding = false;
 
-            sign ^= other.sign;
-            // set sign to 0 when both low and high are zero (avoid having negative zero value)
-            sign &= (0 != low || 0 != high);
+        // optimization for when dividing by an integer
+        if (other.is_int()) {
+            uint64_t nom[2] = {low, high};
+            uint64_t other_int = (uint64_t)other;
+            uint64_t denom[1] = {other_int};
+            uint64_t r[1];
+            if (0 == div_32bit((uint32_t*)q, (uint32_t*)r, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
+                need_rounding = r[0] > (other_int >> 1);
+                high = q[1];
+                low = q[0];
+            }
+            else { // error
+                FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
+            }
         }
-        else { // error
-            FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
+        else {
+            uint64_t nom[4] = {0, 0, low, high};
+            uint64_t denom[2] = {other.low, other.high};
+            if (0 == div_32bit((uint32_t*)q, nullptr, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
+                static constexpr uint64_t half = 1ull << (I - 1);  // used for rounding
+                need_rounding = (q[0] & half) != 0;
+                // result in q needs to shifted left by F
+                // shifting right by 128-F is simpler.
+                high = shift_right128(q[1], q[2], I);
+                low = shift_right128(q[0], q[1], I);
+            }
+            else { // error
+                FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
+            }
         }
+
+        if (need_rounding) {
+            ++low;
+            high += low == 0;
+        }
+        sign ^= other.sign;
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
         return *this;
     }
     /**
@@ -794,6 +874,7 @@ public:
         if (0 == f) {
             sign ^= int32_t(i >> 63);
             int32_t e = FP128_GET_BITS(i, dbl_frac_bits, dbl_exp_bits) - 1023;
+            // TODO: add rounding
             return (e >= 0) ? *this >>= e  : *this <<= e;
         }
 
@@ -810,6 +891,8 @@ public:
         uint64_t denom[2] = {other.low, other.high};
         uint64_t q[4] = {0}, r[4] = {0};
         
+        // TODO: optimize for other being int
+
         //do the division in with positive numbers
         if (0 == div_32bit((uint32_t*)q, (uint32_t*)r, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
             // simple case, both are integers (fractions is zero)
@@ -845,7 +928,7 @@ public:
     }
     /**
      * @brief Shift right this object.
-     * @param shift Bits to shift. negative or very high values cause undefined behavior.
+     * @param shift Bits to shift. Negative or very high values cause undefined behavior.
      * @return This object.
 
     */
@@ -1175,9 +1258,10 @@ private:
         }
         // the faster way, requires temp *= 10 not overflowing
         int digits = 0;
+        uint64_t res[2]{};
         while (digits++ < max_frac_digits && temp) {
             if constexpr (I < 4) {
-                uint64_t res[2];
+                
                 res[0] = _umul128(high, 10ull, &res[1]); // multiply by 10
                 // extract the integer part
                 integer = shift_right128_round(res[0], res[1], upper_frac_bits);
@@ -1236,54 +1320,6 @@ private:
         // set sign to 0 when both low and high are zero (avoid having negative zero value)
         sign &= (0 != low || 0 != high);
         return *this;
-    }
-    /**
-     * @brief shift right 'x' by 'shift' bits with rounding
-     * Undefiend behavior when shift is outside the range [0, 64]
-     * @param x value to shift
-     * @param shift how many bits to shift
-     * @return result of 'x' right shifed by 'shift'. 
-    */
-    static inline uint64_t shift_right64_round(uint64_t x, int shift)
-    {
-        if (x < 1 || x > 63)
-            return x;
-        x += 1ull << (shift - 1);
-        return x >> shift;
-    }
-    /**
-     * @brief Right shift a 128 bit integer.
-     * @param l Low QWORD
-     * @param h High QWORD
-     * @param shift Bits to shift
-     * @return Lower 64 bit of the result
-    */
-    static inline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
-    {
-        return (l >> shift) | (h << (64 - shift));
-    }
-    /**
-     * @brief Right shift a 128 bit integer with rounding.
-     * @param l Low QWORD
-     * @param h High QWORD
-     * @param shift Bits to shift
-     * @return Lower 64 bit of the result
-    */
-    static inline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift)
-    {   
-        const bool need_rounding = (l & 1ull << (shift - 1)) != 0;
-        return need_rounding + ((l >> shift) | (h << (64 - shift)));
-    }
-    /**
-     * @brief Left shift a 128 bit integer.
-     * @param l Low QWORD
-     * @param h High QWORD
-     * @param shift Bits to shift
-     * @return Upper 64 bit of the result
-    */
-    static inline uint64_t shift_left128(uint64_t l, uint64_t h, int shift)
-    {
-        return (h << shift) | (l >> (64 - shift));
     }
 public:
     //
@@ -1398,10 +1434,6 @@ public:
         // yeh old binary search - need an int256 type to use Newton-Raphson or similar methods
         t = (ul + ll) >> 1;
         while (ul > ll + e) {
-            // printf("g0: %0.15lf\n", (double)ul);
-            // printf("g1: %0.15lf\n", (double)ll);
-            // printf("t: %0.15lf\n", (double)t);
-            
             // check if the guess (t) is too big
             if (t * t > x) {
                 ul = t; // decrease upper limit
@@ -1415,7 +1447,7 @@ public:
         return t;
     }
     /**
-     * @brief factorial reciprocal (inverse). Calculates 1 / x!
+     * @brief Factorial reciprocal (inverse). Calculates 1 / x!
      * Maximum value of x that may produce non zero values is 34. 
      * This value depends on the amount of fraction bits.
      * @param x Input value
@@ -1504,10 +1536,13 @@ public:
         
         const fixed_point128 xx = res * res;
         fixed_point128 elem_denom, elem_nom = res;
-
+        
+        // compute the rest of the series, starting with: -(x^3 / 3!)
         for (int i = 3, sign = 1; ; i += 2, sign = 1 - sign) {
             elem_nom *= xx;
             fact_reciprocal(i, elem_denom);
+
+            // precision limit has been hit
             if (!elem_denom)
                 break;
             fixed_point128 elem = elem_nom * elem_denom; // next element in the series
@@ -1548,12 +1583,15 @@ public:
             res = -(pi + res);
 
         const fixed_point128 xx = res * res;
-        res = 1; // first element in the series
+        res = fixed_point128::one(); // first element in the series
         fixed_point128 elem_denom, elem_nom = res;
 
+        // compute the rest of the series starting with: -(x^2 / 2!)
         for (int i = 2, sign = 1; ; i += 2, sign = 1 - sign) {
             elem_nom *= xx;
             fact_reciprocal(i, elem_denom);
+            
+            // precision limit has been hit
             if (!elem_denom)
                 break;
             fixed_point128 elem = elem_nom * elem_denom; // next element in the series
@@ -1562,7 +1600,6 @@ public:
 
         return res;
     }
-
     /**
      * @brief Calculates the exponent of x: e^x
      * Using the Maclaurin series expansion, the formula is:
@@ -1592,7 +1629,6 @@ public:
 
         return res;
     }
-
 }; //class fixed_point128
 
 
