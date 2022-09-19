@@ -88,7 +88,7 @@
 #define ID_VIEW_PRECISION               32811
 #define ID_PRECISION_AUTO               32812
 #define ID_PRECISION_DOUBLE             32813
-#define ID_PRECISION_FLOAT128           32814
+#define ID_PRECISION_FIXEDPOINT128      32814
 #define ID_VIEW_SMOOTHCOLORTRANSITION   32879
 
 // Next default values for new objects

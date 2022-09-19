@@ -36,7 +36,9 @@
 #define new DEBUG_NEW
 #endif
 
+//
 // debug helper macros
+//
 //#define DISABLE_OMP 1
 //#define FLOAT128_DEBUG 1
 //#define INITIAL_POINT 1
@@ -105,7 +107,7 @@ BEGIN_MESSAGE_MAP(CMandelbrotView, CView)
     ON_COMMAND(ID_VIEW_ANIMATEPALETTE, &CMandelbrotView::OnAnimatePalette)
     ON_COMMAND_RANGE(ID_VIEW_GREYSCALE, ID_VIEW_HISTOGRAMCOLORING, &CMandelbrotView::OnPaletteChange)
     ON_COMMAND_RANGE(ID_SETTYPE_MANDELBROT, ID_SETTYPE_JULIA, &CMandelbrotView::OnSetTypeSelect)
-    ON_COMMAND_RANGE(ID_PRECISION_AUTO, ID_PRECISION_FLOAT128, &CMandelbrotView::OnPrecisionSelect)
+    ON_COMMAND_RANGE(ID_PRECISION_AUTO, ID_PRECISION_FIXEDPOINT128, &CMandelbrotView::OnPrecisionSelect)
     ON_COMMAND(ID_SETTYPE_CHOOSEJULIACONSTANT, &CMandelbrotView::OnSetTypeChooseJuliaConstant)
     ON_COMMAND(ID_VIEW_SMOOTHCOLORTRANSITION, &CMandelbrotView::OnSmoothColorTransitions)
     ON_WM_ENTERSIZEMOVE()
@@ -941,21 +943,21 @@ void CMandelbrotView::OnPaletteChange(UINT nID)
 */
 void CMandelbrotView::OnPrecisionSelect(UINT nID)
 {
-    if (nID < ID_PRECISION_AUTO || nID > ID_PRECISION_FLOAT128) {
+    if (nID < ID_PRECISION_AUTO || nID > ID_PRECISION_FIXEDPOINT128) {
         CString str;
         str.Format(L"OnPrecisionSelect: Invalid nID received as argument: %d\n", nID);
         OutputDebugString(str);
     }
 
     CMenu* menu = AfxGetMainWnd()->GetMenu();
-    menu->CheckMenuRadioItem(ID_PRECISION_AUTO, ID_PRECISION_FLOAT128, nID, MF_BYCOMMAND);
+    menu->CheckMenuRadioItem(ID_PRECISION_AUTO, ID_PRECISION_FIXEDPOINT128, nID, MF_BYCOMMAND);
     auto precision = m_Precision;
     switch (nID) {
     case ID_PRECISION_AUTO:
         m_Precision = prAuto; break;
     case ID_PRECISION_DOUBLE:
         m_Precision = prDouble; break;
-    case ID_PRECISION_FLOAT128:
+    case ID_PRECISION_FIXEDPOINT128:
         m_Precision = prFixedPoint128; break;
     }
 
