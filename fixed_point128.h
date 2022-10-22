@@ -27,6 +27,9 @@
     The function div_32bit is derived from the book "Hacker's Delight" 2nd Edition by 
     Henry S. Warren Jr. It was converted to 32 bit operations + a bugfix.
 
+    The functions log, log2, log10 are derived from Dan Moulding's code:
+    https://github.com/dmoulding/log2fix
+
 ************************************************************************************/
 
 #ifndef FIXED_POINT128_H
@@ -87,12 +90,12 @@ static constexpr uint32_t array_length(const T& a) {
 }
 /**
  * @brief shift right 'x' by 'shift' bits with rounding
- * Undefiend behavior when shift is outside the range [0, 64]
+ * Undefined behavior when shift is outside the range [0, 64]
  * @param x value to shift
  * @param shift how many bits to shift
  * @return result of 'x' right shifed by 'shift'.
 */
-FP128_INLINE  uint64_t shift_right64_round(uint64_t x, int shift)
+FP128_INLINE uint64_t shift_right64_round(uint64_t x, int shift)
 {
     if (x < 1 || x > 63)
         return x;
@@ -173,8 +176,8 @@ class fixed_point128
     //
     // members
     //
-    uint64_t low; 
-    uint64_t high;
+    uint64_t low;  // lower QWORD
+    uint64_t high; // upper QWORD
     unsigned sign; // 0 = positive, 1 negative
 
     // useful const calculations
@@ -221,7 +224,7 @@ public:
     */
     fixed_point128(double x) noexcept {
         // brute convert to uint64_t for easy bit manipulation
-        const uint64_t i = *((uint64_t*)(&x));
+        const uint64_t i = *reinterpret_cast<uint64_t*>(&x);
         // very common case
         if (i == 0) {
             low = high = 0;
@@ -1009,9 +1012,7 @@ public:
      * @return This object.
     */
     FP128_INLINE fixed_point128& operator++() noexcept {
-        high += unity;
-        // set sign to 0 when both low and high are zero (avoid having negative zero value)
-        sign &= (0 != low || 0 != high);
+        *this += one();
         return *this;
     }
     /**
@@ -1028,14 +1029,7 @@ public:
      * @return This object.
     */
     FP128_INLINE fixed_point128& operator--() {
-        // unity is in the upper QWORD
-        high -= unity;
-        if (high == max_qword_value) {
-            high = 0;
-            --low;
-        }
-        // set sign to 0 when both low and high are zero (avoid having negative zero value)
-        sign &= (0 != low || 0 != high);
+        *this -= one();
         return *this;
     }
     /**
@@ -1628,6 +1622,72 @@ public:
         }
 
         return res;
+    }
+    /**
+     * @brief Calculates the Log base 2 of x: log2(x)
+     * @param x The number to perform log2 on.
+     * @return log2(x)
+    */
+    friend FP128_INLINE fixed_point128 log2(fixed_point128 x) noexcept
+    {
+        static const fixed_point128 two(2); 
+        fixed_point128 b = fixed_point128::one() >> 1;
+        fixed_point128 y = 0;
+
+        if (!x.is_positive() || x.is_zero()) {
+            return fixed_point128(UINT64_MAX, UINT64_MAX, 1); // represents negative infinity
+        }
+
+        // bring x to the range [1,2)
+        while (x < fixed_point128::one()) {
+            x <<= 1;
+            --y;
+        }
+
+        while (x >= two) {
+            x >>= 1;
+            ++y;
+        }
+
+        // x is an exponent of 2.
+        if (x == fixed_point128::one())
+            return y;
+
+        fixed_point128 z = x;
+        for (size_t i = 0; i < fixed_point128::F; ++i) {
+            z *= z;
+            if (z >= two) {
+                z >>= 1;
+                y += b;
+            }
+            b >>= 1;
+        }
+
+        return y;
+    }
+    /**
+     * @brief Calculates the natural Log (base e) of x: log(x)
+     * @param x The number to perform log on.
+     * @return log2(x)
+    */
+    friend FP128_INLINE fixed_point128 log(fixed_point128 x) noexcept
+    {
+        static const fixed_point128 inv_log2_e = fixed_point128("0.693147180559945309417232121458176575");
+        fixed_point128 y = log2(x);
+
+        return y * inv_log2_e;
+    }
+    /**
+     * @brief Calculates Log base 10 of x: log10(x)
+     * @param x The number to perform log on.
+     * @return log10(x)
+    */
+    friend FP128_INLINE fixed_point128 log10(fixed_point128 x) noexcept
+    {
+        static const fixed_point128 inv_log2_10 = fixed_point128("0.301029995663981195213738894724493068");
+        fixed_point128 y = log2(x);
+
+        return y * inv_log2_10;
     }
 }; //class fixed_point128
 
