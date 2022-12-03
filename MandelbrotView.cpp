@@ -396,7 +396,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
 void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
                                              const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
 {
-    fixed_8_120_t radius = 2, radius_sq = radius * radius;
+    const fixed_8_120_t radius_sq = 2 * 2;
     const float LOG2 = logf(2.0);
 
     //create x table
@@ -413,7 +413,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
         fixed_8_120_t usq, vsq, u, v, x, tmp, uv, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : 0; // no need to do this per pixel for Julia
+        fixed_8_120_t xc = (isJulia) ? cr : 0u; // no need to do this per pixel for Julia
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         //point to start of buffer
@@ -432,12 +432,12 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
             }
             // Mandelbrot
             else {
-                u = 0;
-                v = 0;
-                usq = 0;
-                vsq = 0;
+                u = 0u;
+                v = 0u;
+                usq = 0u;
+                vsq = 0u;
                 xc = x;
-                modulus = 0;
+                modulus = 0u;
             }
 
             // complex iterative equation is:
@@ -447,7 +447,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
                 tmp = usq - vsq + xc;
 
                 // imaginary
-                //v = 2.0 * (u * v) + y;
+                // v = 2.0 * (u * v) + y;
                 v = ((u * v) << 1) + yc;
                 u = tmp;
                 usq = u * u;
@@ -457,10 +457,10 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
             }
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 1) {
-                *(pbuff++) = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
+                *pbuff++ = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
             }
             else {
-                *(pbuff++) = (float)max(iter, 1);
+                *pbuff++ = (float)max(iter, 1);
             }
         }
     }
@@ -483,7 +483,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
 */
 void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
 {
-    const float radius = 2.0, radius_sq = radius * radius;
+    const float radius_sq = 2.0 * 2.0;
     const float LOG2 = logf(2.0);
 
     //create x table
@@ -544,10 +544,10 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
             } 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
                 float mu = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
-                *(pbuff++) = max(mu, 1);
+                *pbuff++ = max(mu, 1);
             }
             else {
-                *(pbuff++) = (float)max(iter, 1);
+                *pbuff++ = (float)max(iter, 1);
             }
         }
     }

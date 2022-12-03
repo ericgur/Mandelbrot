@@ -45,6 +45,9 @@
     <ClInclude Include="fixed_point128.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="fixed_point128_shared.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="Mandelbrot.cpp">
