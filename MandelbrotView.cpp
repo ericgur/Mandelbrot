@@ -291,7 +291,7 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
     ZeroMemory(m_Histogram, sizeof(int) * (m_MaxIter + 1ull));
     bool error = false;
 
-#pragma omp parallel
+#pragma omp parallel 
     {
         // thread local variables.
         int* histogram_private = new int[m_MaxIter + 1ull];
@@ -301,7 +301,7 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
         }
         else {
             ZeroMemory(histogram_private, sizeof(int) * (m_MaxIter + 1ull));
-        #pragma omp for 
+        #pragma omp for schedule(dynamic)
             for (int l = 0; l < height; ++l) {
                 const float* pIter = pIterations + width * l;
                 for (int k = 0; k < width; ++k) {
@@ -338,7 +338,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
     LARGE_INTEGER time_start, time_end;
     QueryPerformanceCounter(&time_start);
 
-#ifndef DISABLE_OMP
+#ifndef DISABLE_OMP schedule(dynamic)
 #pragma omp parallel for
 #endif
     for (int l = 0; l < height; ++l) {
@@ -408,7 +408,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
     bool isJulia = cr || ci ;
 
 #ifndef DISABLE_OMP
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic) 
 #endif
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
@@ -495,7 +495,7 @@ void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height,
     bool isJulia = cr != 0 || ci != 0;
 
 #ifndef DISABLE_OMP
-#pragma omp parallel for
+#pragma omp parallel for schedule(dynamic)
 #endif
     for (int l = 0; l < height; ++l) {
         double y = y0 + (dy * l);
