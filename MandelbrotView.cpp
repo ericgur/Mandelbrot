@@ -294,14 +294,14 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
 #pragma omp parallel 
     {
         // thread local variables.
-        int* histogram_private = new int[m_MaxIter + 1ull];
+        thread_local int* histogram_private = new int[m_MaxIter + 1];
         if (histogram_private == nullptr) {
             assert(histogram_private != nullptr);
             error = true;
         }
         else {
-            ZeroMemory(histogram_private, sizeof(int) * (m_MaxIter + 1ull));
-        #pragma omp for schedule(dynamic)
+            ZeroMemory(histogram_private, sizeof(int) * (m_MaxIter + 1));
+        #pragma omp for
             for (int l = 0; l < height; ++l) {
                 const float* pIter = pIterations + width * l;
                 for (int k = 0; k < width; ++k) {
@@ -338,8 +338,8 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
     LARGE_INTEGER time_start, time_end;
     QueryPerformanceCounter(&time_start);
 
-#ifndef DISABLE_OMP schedule(dynamic)
-#pragma omp parallel for
+#ifndef DISABLE_OMP 
+#pragma omp parallel for 
 #endif
     for (int l = 0; l < height; ++l) {
         //point to start of buffer

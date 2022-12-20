@@ -39,8 +39,14 @@
 #define FIXED_POINT128_H
 
 #include "fixed_point128_shared.h"
+//#include "uint128_t.h"
 
 namespace fp128 {
+
+/***********************************************************************************
+*                                  Forward declarations
+************************************************************************************/
+class fp128_gtest; // Google test class
 
 /***********************************************************************************
 *                                  Main Code
@@ -73,6 +79,7 @@ class fixed_point128
 
     // friends
     friend class fixed_point128; // this class is a friend of all its template instances. Avoids awkward getter/setter functions.
+    friend class fp128_gtest;
 private:
     //
     // members
@@ -128,13 +135,13 @@ public:
             // shift left by I2 - I bits
             constexpr int shift = I2 - I;
             low = other.low << shift;
-            high = shift_left128(other.low, other.high, (uint8_t)(64 - shift));
+            high = shift_left128(other.low, other.high, 64 - shift);
         }
         // other has more integer bits and less fraction bits
         else { // I > I2
             // shift right by I - I2 bits
             constexpr int shift = I - I2;
-            low = shift_right128_round(other.low, other.high, (uint8_t)shift);
+            low = shift_right128_round(other.low, other.high, shift);
             high = other.high >> shift;
         }
     }
@@ -152,20 +159,21 @@ public:
      * @param x Input value
     */
     constexpr fixed_point128(double x) noexcept {
-        // brute convert to uint64_t for easy bit manipulation
-        const uint64_t i = *reinterpret_cast<uint64_t*>(&x);
         // very common case
-        if (i == 0) {
+        if (x == 0) {
             low = high = 0;
             sign = 0;
             return;
         }
 
-        sign = FP128_GET_BIT(i, 63);
-        const int32_t e = FP128_GET_BITS(i, dbl_frac_bits, dbl_exp_bits) - 1023;
-        uint64_t f = (i & FP128_MAX_VALUE_64(dbl_frac_bits));
+        // hack the double bit fields
+        Double d(x);
+
+        sign = d.s;
+        const int32_t e = static_cast<int32_t>(d.e) - 1023;
+        uint64_t f = d.f;
         
-        // overflow which catches NaN and Inf
+        // overflow which also catches NaN and Inf
         if (e >= I) {
             high = low = UINT64_MAX;
             sign = 0;
@@ -195,8 +203,9 @@ public:
                 // shift f into low QWORD
                 else {
                     high = 0;
-                    bits_to_shift -= dbl_frac_bits;
+                    // f has bit 52 high, shift it left to moves to bit 63
                     f <<= 63 - dbl_frac_bits;
+                    bits_to_shift -= 64 - (63 - dbl_frac_bits);
                     low = f >> bits_to_shift;
                 }
             }
@@ -418,41 +427,111 @@ public:
      * @return Object value.
     */
     FP128_INLINE operator float() const noexcept {
-        double res = (double)(high * upper_unity); // bits [64:127]
-        res += (double)(low * lower_unity);        // bits [0:63]
-        return (float)((sign) ? -res : res);
+        if (!*this)
+            return 0.0f;
+
+        Float res;
+        res.s = sign;
+        int32_t s = (int32_t)lzcnt128(*this);
+        int32_t msb = 127 - s;
+        auto expo = I - 1 - s;
+
+        res.e = 127u + expo;
+        // get the 52 bits right of the msb.
+        fixed_point128 temp(*this);
+        int shift = msb - flt_frac_bits;
+        if (shift > 0) {
+            temp >>= shift;
+        }
+        if (shift < 0) {
+            temp <<= -shift;
+        }
+        res.f = FP128_GET_BITS(temp.low, 0, flt_frac_bits);
+
+        return res.val;
     }
     /**
      * @brief operator double - converts to a double
      * @return Object value.
     */
     FP128_INLINE operator double() const noexcept {
-        double res = (double)(high * upper_unity); // bits [64:127]
-        res += (double)(low * lower_unity);        // bits [0:63]
-        return (sign) ? -res : res;
+        if (!*this)
+            return 0.0;
+
+        Double res;
+        res.s = sign;
+        int32_t s = (int32_t)lzcnt128(*this);
+        int32_t msb = 127 - s;
+        auto expo = I - 1 - s;
+
+        res.e = 1023ull + expo;
+        // get the 52 bits right of the msb.
+        fixed_point128 temp(*this);
+        int shift = msb - dbl_frac_bits;
+        if (shift > 0) {
+            temp >>= shift;
+        }
+        if (shift < 0) {
+            temp <<= -shift;
+        }
+        res.f = FP128_GET_BITS(temp.low, 0, dbl_frac_bits);
+        return res.val;
     }
     /**
      * @brief operator long double - converts to a long double
      * @return Object value.
     */
     FP128_INLINE operator long double() const noexcept {
-        long double res = (long double)(high * upper_unity); // bits [64:127]
-        res += (long double)(low * lower_unity);             // bits [0:63]
-        return (sign) ? -res : res;
+        return operator double();
     }
     /**
      * @brief Converts to a std::string (slow) string holds all meaningful fraction bits.
      * @return object string representation
     */
     FP128_INLINE operator std::string() const {
-        return fp2s();
+        return operator char*();
     }
     /**
      * @brief Converts to a C string (slow) string holds all meaningful fraction bits.
      * @return object string representation
     */
     explicit FP128_INLINE operator char*() const {
-        return fp2s();
+        static thread_local char str[128]; // need roughly a (meaningful) decimal digit per 3.2 bits
+
+        char* p = str;
+        fixed_point128 temp = *this;
+
+        //number is negative
+        if (temp.sign)
+            *p++ = '-';
+
+        uint64_t integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
+        p += snprintf(p, sizeof(str) + p - str, "%llu", integer);
+        temp.high &= ~int_mask; // remove the integer part
+        // check if temp has additional digits (not zero)
+        if (temp) {
+            *p++ = '.';
+        }
+        // the faster way, requires temp *= 10 not overflowing
+        int digits = 0;
+        uint64_t res[2]{};
+        while (digits++ < max_frac_digits && temp) {
+            if constexpr (I < 4) {
+
+                res[0] = _umul128(high, 10ull, &res[1]); // multiply by 10
+                // extract the integer part
+                integer = shift_right128_round(res[0], res[1], upper_frac_bits);
+                temp *= 10; // move another digit to the integer area
+            }
+            else {
+                temp *= 10; // move another digit to the integer area
+                integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
+            }
+            *p++ = '0' + (char)integer;
+            temp.high &= ~int_mask;
+        }
+        *p = '\0';
+        return str;
     }
     //
     // math operators
@@ -569,16 +648,28 @@ public:
      * @return This object.
     */
     FP128_INLINE fixed_point128& operator+=(const fixed_point128& other) {
-        if (!other) {
-            return *this;
-        }
+        bool result_has_different_sign = false;
+        fixed_point128 temp = other;
 
         // different sign: invert the sign for other and subtract
         if (other.sign != sign) {
-            return subtract(-other);
+            temp.sign ^= 1;
+            result_has_different_sign = (sign) ? temp < *this : temp > *this;
+            twos_complement128(temp.low, temp.high);
+        }
+        //add the other value
+        unsigned char carry = _addcarry_u64(0, low, temp.low, &low);
+        high += temp.high + carry;
+
+        // if result is with a different sign, invert it along with the sign.
+        if (result_has_different_sign) {
+            sign ^= 1;
+            twos_complement128(low, high);
         }
 
-        return add(other);
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
+        return *this;
     }
     /**
      * @brief Add a value to this object
@@ -595,16 +686,27 @@ public:
      * @return This object.
     */
     FP128_INLINE fixed_point128& operator-=(const fixed_point128& other) {
-        if (!other) {
-            return *this;
+        bool result_has_different_sign = false;
+        fixed_point128 temp = other;
+
+        // different sign: invert the sign for other and subtract
+        if (other.sign == sign) {
+            result_has_different_sign = (sign) ? temp < *this : temp > *this;
+            twos_complement128(temp.low, temp.high);
+        }
+        //add the other value
+        unsigned char carry = _addcarry_u64(0, low, temp.low, &low);
+        high += temp.high + carry;
+
+        // if result is with a different sign, invert it along with the sign.
+        if (result_has_different_sign) {
+            sign ^= 1;
+            twos_complement128(low, high);
         }
 
-        // different sign: invert the sign for other and add
-        if (other.sign != sign) {
-            return add(-other);
-        }
-
-        return subtract(other);
+        // set sign to 0 when both low and high are zero (avoid having negative zero value)
+        sign &= (0 != low || 0 != high);
+        return *this;
     }
     /**
      * @brief Subtract a value to this object
@@ -645,10 +747,10 @@ public:
         carry = _addcarry_u64(0, res[1], temp2[0], &res[1]);
         res[3] += _addcarry_u64(carry, res[2], temp2[1], &res[2]);
 
-        // extract the bits from root[] keeping the precision the same as this object
+        // extract the bits from res[] keeping the precision the same as this object
         // shift result by F
         static constexpr int32_t index = F >> 6; // / 64;
-        static constexpr int32_t lsb = F & FP128_MAX_VALUE_64(6); // bit within the 64bit data pointed by root[index]
+        static constexpr int32_t lsb = F & FP128_MAX_VALUE_64(6); // bit within the 64bit data pointed by res[index]
         static constexpr uint64_t half = 1ull << (lsb - 1);       // used for rounding
         const bool need_rounding = (res[index] & half) != 0;
 
@@ -715,14 +817,22 @@ public:
      * @return this object.
     */
     inline fixed_point128& operator/=(const fixed_point128& other) {
-        uint64_t q[4]{}; 
         bool need_rounding = false;
         // trivial case, this object is zero
         if (!*this)
             return *this;
 
+        // exponent of 2, convert to a much faster shift operation
+        if (1 == popcnt128(other.low, other.high)) {
+            auto expo = other.get_exponent();
+            if (expo > 0)
+                *this >>= (int32_t)expo;
+            else if (expo < 0)
+                *this <<= (int32_t)-expo;
+        }
         // optimization for when dividing by an integer
-        if (other.is_int() && (uint64_t)other <= UINT64_MAX) {
+        else if (other.is_int() && (uint64_t)other <= UINT64_MAX) {
+            uint64_t q[2]{};
             uint64_t nom[2] = { low, high };
             uint64_t denom = (uint64_t)other;
             uint64_t r;
@@ -736,13 +846,14 @@ public:
             }
         }
         else {
+            uint64_t q[4]{};
             uint64_t nom[4] = {0, 0, low, high};
             uint64_t denom[2] = {other.low, other.high};
 
             if (0 == div_32bit((uint32_t*)q, nullptr, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
                 static constexpr uint64_t half = 1ull << (I - 1);  // used for rounding
                 need_rounding = (q[0] & half) != 0;
-                // result in q needs to shifted left by F
+                // result in q needs to shifted left by F (F bits were added to the right)
                 // shifting right by 128-F is simpler.
                 high = shift_right128(q[1], q[2], I);
                 low = shift_right128(q[0], q[1], I);
@@ -777,21 +888,19 @@ public:
     */
     template<>
     FP128_INLINE fixed_point128& operator/=<double>(double x) {
-        const uint64_t i = *((uint64_t*)(&x));
-        // infinity
-        if (0 == i) FP128_FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
+        if (0 == x) FP128_FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
 
-        uint64_t f = (i & FP128_MAX_VALUE_64(dbl_frac_bits));
-        // simple and common case, the value is an exponent of 2
-        if (0 == f) {
-            sign ^= int32_t(i >> 63);
-            int32_t e = FP128_GET_BITS(i, dbl_frac_bits, dbl_exp_bits) - 1023;
-            return (e >= 0) ? *this >>= e : *this <<= e;
+        // Simple and common case, the value is an exponent of 2
+        // Convert to a much faster shift operation
+        Double d(x);
+        if (0 == d.f) {
+            sign ^= d.s;
+            int32_t e = (int32_t)d.e - 1023;
+            return (e >= 0) ? *this >>= e : *this <<= -e;
         }
 
         // normal division
-        *this /= fixed_point128(x);
-        return *this;
+        return *this /= fixed_point128(x);
     }
     /**
      * @brief %= operator
@@ -821,31 +930,35 @@ public:
             x_div_y.high = (q[2] << upper_frac_bits) | (q[1] >> I);
             x_div_y.low = (q[1] << upper_frac_bits) | (q[0] >> I);
             x_div_y.sign = sign ^ other.sign;
-        #if FP128_CPP_STYLE_MODULO == TRUE
-            bool this_was_positive = is_positive();
-            //x_div_y = (x_div_y.is_positive()) ? floor(x_div_y) : ceil(x_div_y);
-            //*this -= other * x_div_y; 
-            *this -= other * floor(x_div_y);
-            
-            // this was positive, return positive modulo
-            if (this_was_positive) {
-                if (is_negative())
-                    *this += other.is_positive() ? other : -other;
+            // Integer result - remainder is zero.
+            if (x_div_y.is_int()) {
+                *this = 0;
             }
-            // this was negative, return negative modulo
-            else { 
-                if (is_positive())
-                    *this += other.is_positive() ? -other : other;
+            // Fraction result - remainder is non zero.
+            else {
+                if constexpr (FP128_CPP_STYLE_MODULO) {
+                    bool this_was_positive = is_positive();
+                    *this -= other * floor(x_div_y);
+                    // this was positive, return positive modulo
+                    if (this_was_positive) {
+                        if (is_negative())
+                            *this += other.is_positive() ? other : -other;
+                    }
+                    // this was negative, return negative modulo
+                    else {
+                        if (is_positive())
+                            *this += other.is_positive() ? -other : other;
+                    }
+                }
+                else {
+                    *this -= other * floor(x_div_y);
+                    // common case (fractions and integers) where one of the values is negative
+                    if (sign != other.sign) {
+                        // the remainder + denominator
+                        *this += other;
+                    }
+                }
             }
-        #else
-            *this -= other * floor(x_div_y);
-            // common case (fractions and integers) where one of the values is negative
-            if (sign != other.sign) {
-                // the remainder + denominator
-                *this += other;
-        }
-        #endif
-
 
             // Note if signs are the same, for nom/denom, the result keeps the sign.
             // set sign to 0 when both low and high are zero (avoid having negative zero value)
@@ -1198,8 +1311,7 @@ public:
     FP128_INLINE int32_t get_exponent() const
     {
         int32_t s = (int32_t)lzcnt128(*this);
-        s = I - s - 1;
-        return s;
+        return I - 1 - s;
     }
     /**
      * @brief Returns an instance of fixed_point128 with the value of pi
@@ -1244,50 +1356,6 @@ public:
 
 private:
     /**
-     * @brief Converts this object to a C string.
-     * The returned string is a statically thread-allocated buffer.
-     * Additional calls to this function from the same thread, overwrite the previous result.
-     * @return C string with describing the value of the object.
-    */
-    FP128_INLINE char* fp2s() const {
-        static thread_local char str[128]; // need roughly a (meaningful) decimal digit per 3.2 bits
-
-        char* p = str;
-        fixed_point128 temp = *this;
-
-        //number is negative
-        if (temp.sign)
-            *p++ = '-';
-
-        uint64_t integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
-        p += snprintf(p, sizeof(str) + p - str, "%llu", integer);
-        temp.high &= ~int_mask; // remove the integer part
-        // check if temp has additional digits (not zero)
-        if (temp) {
-            *p++ = '.';
-        }
-        // the faster way, requires temp *= 10 not overflowing
-        int digits = 0;
-        uint64_t res[2]{};
-        while (digits++ < max_frac_digits && temp) {
-            if constexpr (I < 4) {
-                
-                res[0] = _umul128(high, 10ull, &res[1]); // multiply by 10
-                // extract the integer part
-                integer = shift_right128_round(res[0], res[1], upper_frac_bits);
-                temp *= 10; // move another digit to the integer area
-            }
-            else {
-                temp *= 10; // move another digit to the integer area
-                integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
-            }
-            *p++ = '0' + (char)integer;
-            temp.high &= ~int_mask;
-        }
-        *p = '\0';
-        return str;
-    }
-    /**
      * @brief Adds 2 fixed_point128 objects of the same sign. Throws exception otherwise. this = this + other.
      * @param other The right side of the addition operation
      * @return This object.
@@ -1304,12 +1372,14 @@ private:
         return *this;
     }
     /**
-     * @brief Subtracts 2 fixed_point128 objects of the same sign. Throws exception otherwise. this = this + other.
+     * @brief Subtracts 2 fixed_point128 objects of the same sign. Throws exception otherwise. this = this - other.
      * @param other The right side of the subtraction operation.
      * @return This object.
     */
     FP128_INLINE fixed_point128& subtract(const fixed_point128& other) FP128_THROW_ONLY_IN_DEBUG {
-        FP128_ASSERT(other.sign == sign); // bug if asserted, calling method should take care of this
+        assert(other.sign == sign); // bug if asserted, calling method should take care of this
+
+        bool result_has_different_sign = (sign) ? other < *this : other > *this;
 
         // convert other high/low to 2's complement (flip bits, add +1)
         uint64_t other_low = other.low;
@@ -1320,8 +1390,8 @@ private:
         unsigned char carry = _addcarry_u64(0, low, other_low, &low);
         high += other_high + carry;
 
-        // if result is is negative, invert it along with the sign.
-        if (high & FP128_ONE_SHIFT(63)) {
+        // if result is with a different sign, invert it along with the sign.
+        if (result_has_different_sign) {
             sign ^= 1;
             twos_complement128(low, high);
         }
@@ -1764,6 +1834,108 @@ public:
 
         return y * inv_log2_10;
     }
+    /*
+    static int div_64bit_test(uint64_t* q, uint64_t* r, const uint64_t* u, const uint64_t* v, int m, int n) noexcept
+    {
+        constexpr uint128_t b(0, 1); // Number base (64 bits).
+        constexpr uint128_t mask(UINT64_MAX, 0);   // 64 bit mask
+        uint64_t* un, * vn;                // Normalized form of u, v.
+        uint128_t qhat;                     // Estimated quotient digit.
+        uint128_t rhat;                     // A remainder.
+        uint128_t p;                        // Product of two digits.
+        //int128_t t, k;                      // Temporary variables
+        int64_t t, k;                      // Temporary variables
+        int32_t i, j;                      // Indexes
+        // disable various warnings, some are bogus in VS2022.
+        // the below code relies on the implied truncation (to 32 bit) of several expressions.
+    #pragma warning(push)
+    #pragma warning(disable: 6255)
+    #pragma warning(disable: 4244)
+    #pragma warning(disable: 6297)
+    #pragma warning(disable: 6385)
+    #pragma warning(disable: 6386)
+    #pragma warning(disable: 26451)
+
+    // shrink the arrays to avoid extra work on small numbers
+        while (m > 0 && u[m - 1] == 0) --m;
+        while (n > 0 && v[n - 1] == 0) --n;
+
+        if (m < n || n <= 0 || v[n - 1] == 0)
+            return 1; // Return if invalid param.
+
+        // Take care of the case of a single-digit divisor here.
+        if (n == 1)
+            return div_64bit(q, r, u, v[0], m);
+
+        // Normalize by shifting v left just enough so that its high-order
+        // bit is on, and shift u left the same amount. We may have to append a
+        // high-order digit on the dividend; we do that unconditionally.
+
+        const int32_t s = __lzcnt64(v[n - 1]);             // 0 <= s <= 64.
+        const int32_t s_comp = 64 - s;
+        vn = (uint64_t*)_alloca(sizeof(uint64_t) * n);
+        for (i = n - 1; i > 0; --i) {
+            vn[i] = shift_left128(v[i - 1], v[i], s);
+            //vn[i] = (v[i] << s) | ((uint64_t)v[i - 1] >> s_comp);
+        }
+        vn[0] = v[0] << s;
+
+        un = (uint64_t*)_alloca(sizeof(uint64_t) * (m + 1));
+        un[m] = (uint128_t)u[m - 1] >> s_comp;
+        for (i = m - 1; i > 0; --i)
+            un[i] = (u[i] << s) | (uint64_t)((uint128_t)u[i - 1] >> s_comp);
+        un[0] = u[0] << s;
+
+        for (j = m - n; j >= 0; --j) {       // Main loop.
+            // Compute estimate qhat of q[j].
+            uint128_t d(un[j + n - 1], un[j + n]);
+            qhat = d / vn[n - 1];
+            rhat = d - qhat * vn[n - 1];
+            //qhat = (un[j + n] * b + un[j + n - 1]) / vn[n - 1];
+            //rhat = (un[j + n] * b + un[j + n - 1]) - qhat * vn[n - 1];
+        again:
+            if (qhat >= b || qhat * vn[n - 2] > (rhat << 64) + un[j + n - 2]) {
+                --qhat;
+                rhat += vn[n - 1];
+                if (rhat < b) goto again;
+            }
+
+            // Multiply and subtract.
+            k = 0;
+            for (i = 0; i < n; ++i) {
+                p = qhat * vn[i];
+                t = (uint128_t)un[i + j] - k - (p & mask);
+                un[i + j] = t;
+                k = (p.high) - (t.high);
+            }
+            t = un[j + n] - k;
+            un[j + n] = t;
+
+            q[j] = qhat;          // Store quotient digit.
+            if (t < 0) {          // If we subtracted too
+                q[j] = q[j] - 1;  // much, add back.
+                k = 0;
+                for (i = 0; i < n; ++i) {
+                    t = (uint64_t)un[i + j] + vn[i] + k;
+                    un[i + j] = t;
+                    k = t >> 32;
+                }
+                un[j + n] = un[j + n] + k;
+            }
+        } // End j.
+        // If the caller wants the remainder, unnormalize
+        // it and pass it back.
+        if (r != NULL) {
+            for (i = 0; i < n - 1; ++i)
+                r[i] = (un[i] >> s) | ((uint64_t)un[i + 1] << s_comp);
+
+            r[n - 1] = un[n - 1] >> s;
+        }
+        return 0;
+    #pragma warning(pop)
+    }
+    */
+
 }; //class fixed_point128
 
 
