@@ -47,6 +47,7 @@
 #endif
 
 static constexpr bool FP128_CPP_STYLE_MODULO = true; // set to false to test python style modulo
+static constexpr bool FP128_USE_RECIPROCAL_FOR_DIVISION = true;
 
 /***********************************************************************************
 *                                  Macros
@@ -83,7 +84,7 @@ static constexpr int32_t dbl_exp_bits = 11;   // exponent bit count of a double 
 #pragma warning(push)
 #pragma warning(disable: 4201) // nameless union/structs
 struct Double {
-    Double(double v = 0) : val(v) {}
+    Double(double v = 0) noexcept: val(v) {}
     union {
         struct {
             uint64_t f : dbl_frac_bits; // mantisa/fraction
@@ -94,7 +95,7 @@ struct Double {
     };
 };
 struct Float {
-    Float(float v = 0) : val(v) {}
+    Float(float v = 0) noexcept : val(v) {}
     union {
         struct {
             uint32_t f : flt_frac_bits; // mantisa/fraction
@@ -133,7 +134,7 @@ constexpr uint32_t array_length(const T& a) {
     * @param shift how many bits to shift
     * @return result of 'x' the combined 64 bit element right shifted by 'shift' bits.
 */
-__forceinline uint32_t shift_right64(uint32_t l, uint32_t h, int shift) 
+__forceinline uint32_t shift_right64(uint32_t l, uint32_t h, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 32);
     return (shift > 0) ? (l >> shift) | (h << (32 - shift)) : l;
@@ -145,7 +146,7 @@ __forceinline uint32_t shift_right64(uint32_t l, uint32_t h, int shift)
     * @param shift how many bits to shift
     * @return result of the combined 64 bit element left shifted by 'shift' bits.
 */
-__forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift) 
+__forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 32);
     return (shift > 0) ?  (h << shift) | (l >> (32 - shift)) : h;
@@ -157,7 +158,7 @@ __forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift)
     * @param shift how many bits to shift
     * @return result of 'x' right shifted by 'shift' bits.
 */
-__forceinline uint64_t shift_right64_round(uint64_t x, int shift) 
+__forceinline uint64_t shift_right64_round(uint64_t x, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 64);
     x += 1ull << (shift - 1);
@@ -170,7 +171,7 @@ __forceinline uint64_t shift_right64_round(uint64_t x, int shift)
     * @param shift Bits to shift, between 0-127
     * @return Lower 64 bit of the result
 */
-__forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift)
+__forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
 {
     if (shift == 0) return l;
     if (shift < 64) return (l >> shift) | (h << (64 - shift));
@@ -184,7 +185,7 @@ __forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift)
     * @param shift Bits to shift, between 0-127
     * @return Lower 64 bit of the result
 */
-__forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift)
+__forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) noexcept
 {
     if (shift == 0) return l;
     if (shift < 64) {
@@ -205,15 +206,15 @@ __forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift)
     * @param shift Bits to shift, between 0-127
     * @return Upper 64 bit of the result
 */
-__forceinline uint64_t shift_left128(uint64_t l, uint64_t h, int shift)
+__forceinline uint64_t shift_left128(uint64_t l, uint64_t h, int shift) noexcept
 {
     if (shift == 0) return h;
     if (shift < 64) return (h << shift) | (l >> (64 - shift));
-    if (shift < 128) return l << (shift ^ 64);
+    if (shift < 128) return l << (shift - 64);
     return 0;
 }
 /**
-    * @brief converts a 128 integer to negavite via 2's complement.
+    * @brief converts a 128 integer to negative via 2's complement.
     * @param l Low QWORD (ref)
     * @param h High QWORD (ref)
     * @return void
@@ -242,12 +243,12 @@ FP128_INLINE static int32_t div_32bit(uint32_t* q, uint32_t* r, const uint32_t* 
     uint64_t k = 0;
     for (auto j = m - 1; j >= 0; --j) {
         k = (k << 32) + u[j];
-        q[j] = (uint32_t)(k / v);
-        k -= (uint64_t)q[j] * v;
+        q[j] = static_cast<uint32_t>(k / v);
+        k -= static_cast<uint64_t>(q[j]) * v;
     }
 
     if (r != nullptr)
-        *r = (uint32_t)k;
+        *r = static_cast<uint32_t>(k);
     return 0;
 }
 /**
@@ -260,16 +261,19 @@ FP128_INLINE static int32_t div_32bit(uint32_t* q, uint32_t* r, const uint32_t* 
     * @param n Count of elements in v
     * @return 0 for success
 */
-static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t* v, int m, int n) noexcept
+inline static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t* v, int m, int n) noexcept
 {
-    constexpr uint64_t b = 1ull << 32; // Number base (32 bits).
-    constexpr uint64_t mask = b - 1;   // 32 bit mask
-    uint32_t *un, *vn;                 // Normalized form of u, v.
-    uint64_t qhat;                     // Estimated quotient digit.
-    uint64_t rhat;                     // A remainder.
-    uint64_t p;                        // Product of two digits.
-    int64_t t, k;                      // Temporary variables
-    int32_t i, j;                      // Indexes
+    if (q == nullptr || u == nullptr || v == nullptr) return 1;
+
+    constexpr uint64_t WORD_WIDTH = 32ull;        // bit width of a word
+    constexpr uint64_t BASE = 1ull << WORD_WIDTH; // Number base (32 bits).
+    constexpr uint64_t MASK = BASE - 1;           // 32 bit mask
+    uint32_t *un, *vn;                            // Normalized form of u, v.
+    uint64_t qhat;                                // Estimated quotient digit.
+    uint64_t rhat;                                // A remainder.
+    uint64_t p;                                   // Product of two digits.
+    int64_t t, k;                                 // Temporary variables
+    int32_t i, j;                                 // Indexes
     // disable various warnings, some are bogus in VS2022.
     // the below code relies on the implied truncation (to 32 bit) of several expressions.
 #pragma warning(push)
@@ -279,8 +283,10 @@ static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t
 #pragma warning(disable: 6385)
 #pragma warning(disable: 6386)
 #pragma warning(disable: 26451)
+#pragma warning(disable: 26493)
+#pragma warning(disable: 26438)
 
-// shrink the arrays to avoid extra work on small numbers
+    // shrink the arrays to avoid extra work on small numbers
     while (m > 0 && u[m - 1] == 0) --m;
     while (n > 0 && v[n - 1] == 0) --n;
 
@@ -295,8 +301,8 @@ static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t
     bit is on, and shift u left the same amount. We may have to append a
     high-order digit on the dividend; we do that unconditionally. */
 
-    const int32_t s = __lzcnt(v[n - 1]);             // 0 <= s <= 31.
-    const int32_t s_comp = 32 - s;
+    const int32_t s = __lzcnt(v[n - 1]);             // 0 <= s <= WORD_WIDTH-1.
+    const int32_t s_comp = WORD_WIDTH - s;
     vn = (uint32_t*)_alloca(sizeof(uint32_t) * n);
     for (i = n - 1; i > 0; --i) {
         //vn[i] = shift_left64(v[i - 1], v[i], s);
@@ -312,23 +318,24 @@ static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t
 
     for (j = m - n; j >= 0; --j) {       // Main loop.
         // Compute estimate qhat of q[j].
-        qhat = _udiv128(0, un[j + n] * b + un[j + n - 1], vn[n - 1], &rhat);
-        //qhat = (un[j + n] * b + un[j + n - 1]) / vn[n - 1];
-        //rhat = (un[j + n] * b + un[j + n - 1]) - qhat * vn[n - 1];
+        qhat = _udiv128(0, ((uint64_t)un[j + n] << WORD_WIDTH) | un[j + n - 1], vn[n - 1], &rhat);
+        //qhat = (un[j + n] * BASE + un[j + n - 1]) / vn[n - 1];
+        //rhat = (un[j + n] * BASE + un[j + n - 1]) - qhat * vn[n - 1];
     again:
-        if (qhat >= b || qhat * vn[n - 2] > (rhat << 32) + un[j + n - 2]) {
+        if (qhat >= BASE || qhat * vn[n - 2] > ((rhat << WORD_WIDTH) | un[j + n - 2])) {
             --qhat;
             rhat += vn[n - 1];
-            if (rhat < b) goto again;
+            if (rhat < BASE) 
+                goto again;
         }
 
         // Multiply and subtract.
         k = 0;
         for (i = 0; i < n; ++i) {
             p = qhat * vn[i];
-            t = un[i + j] - k - (p & mask);
+            t = un[i + j] - k - (p & MASK);
             un[i + j] = t;
-            k = (p >> 32) - (t >> 32);
+            k = (p >> WORD_WIDTH) - (t >> WORD_WIDTH);
         }
         t = un[j + n] - k;
         un[j + n] = t;
@@ -340,14 +347,14 @@ static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const uint32_t
             for (i = 0; i < n; ++i) {
                 t = (uint64_t)un[i + j] + vn[i] + k;
                 un[i + j] = t;
-                k = t >> 32;
+                k = t >> WORD_WIDTH;
             }
             un[j + n] = un[j + n] + k;
         }
         } // End j.
         // If the caller wants the remainder, unnormalize
         // it and pass it back.
-    if (r != NULL) {
+    if (r != nullptr) {
         for (i = 0; i < n - 1; ++i)
             r[i] = (un[i] >> s) | ((uint64_t)un[i + 1] << s_comp);
         
@@ -409,7 +416,7 @@ FP128_INLINE static int32_t div_64bit(uint64_t* q, uint64_t* r, const uint64_t* 
  * @param x The number to perform log2 on.
  * @return log2(x). Returns zero when x is zero.
 */
-__forceinline uint64_t log2(uint64_t x)
+__forceinline uint64_t log2(uint64_t x) noexcept
 {
     return (x) ? 63ull - __lzcnt64(x) : 0;
 }
@@ -419,7 +426,7 @@ __forceinline uint64_t log2(uint64_t x)
  * @param x The number to perform log2 on.
  * @return log2(x). Returns zero when x is zero.
 */
-__forceinline uint32_t log2(uint32_t x)
+__forceinline uint32_t log2(uint32_t x) noexcept
 {
     return (x) ? 31ull - __lzcnt(x) : 0;
 }
