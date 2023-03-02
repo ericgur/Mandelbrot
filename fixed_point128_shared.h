@@ -1,7 +1,7 @@
 /***********************************************************************************
     MIT License
 
-    Copyright (c) 2022 Eric Gur (ericgur@iname.com)
+    Copyright (c) 2023 Eric Gur (ericgur@iname.com)
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -24,7 +24,7 @@
 #ifndef FIXED_POINT128_SHARED_H
 #define FIXED_POINT128_SHARED_H
 
-#include <intrin.h>
+#include <immintrin.h>
 #include <string>
 #include <cstdint>
 #include <cstdlib>
@@ -46,14 +46,34 @@
 #define FP128_INLINE __forceinline
 #endif
 
+// Set to TRUE to disable function inlining - useful for profiling a specific function
+#ifndef UINT128_T_DISABLE_INLINE
+#define UINT128_T_DISABLE_INLINE FALSE
+#endif 
+
+#if UINT128_T_DISABLE_INLINE != FALSE
+#define UINT128_T_INLINE __declspec(noinline)
+#else
+#define UINT128_T_INLINE __forceinline
+#endif
+
 static constexpr bool FP128_CPP_STYLE_MODULO = true; // set to false to test python style modulo
 static constexpr bool FP128_USE_RECIPROCAL_FOR_DIVISION = true;
 
 /***********************************************************************************
 *                                  Macros
 ************************************************************************************/
+#ifndef max
+#define max(a,b)            (((a) > (b)) ? (a) : (b))
+#endif
+
+#ifndef min
+#define min(a,b)            (((a) < (b)) ? (a) : (b))
+#endif
+
+
 #define FP128_ONE_SHIFT(x)          (1ull << (x))
-#define FP128_MAX_VALUE_64(x)       (((uint64_t)-1ll) >> (64 - x))
+#define FP128_MAX_VALUE_64(x)       (((uint64_t)-1ll) >> (64 - (x)))
 #define FP128_GET_BIT(x, n)         (((x) >> (n)) & 1)
 #define FP128_GET_BITS(x, b, count) (((x) >> (b)) & FP128_MAX_VALUE_64(count))
 #define FP128_INT_DIVIDE_BY_ZERO_EXCEPTION   throw std::logic_error("Integer divide by zero!")
@@ -153,17 +173,112 @@ __forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift) noexcept
 }
 /**
     * @brief shift right 'x' by 'shift' bits with rounding
-    * Undefined behavior when shift is outside the range [1, 63]
+    * Undefined behavior when shift is outside the range [0, 63]
     * @param x value to shift
     * @param shift how many bits to shift
     * @return result of 'x' right shifted by 'shift' bits.
 */
 __forceinline uint64_t shift_right64_round(uint64_t x, int shift) noexcept
 {
-    FP128_ASSERT(shift >= 0 && shift < 64);
+    assert(shift > 0 && shift < 64);
     x += 1ull << (shift - 1);
     return x >> shift;
 }
+/**
+    * @brief Right shift a 128 bit integer (inplace). 
+    * Limited range, inplace and no paramter checks.
+    * @param l Low QWORD
+    * @param h High QWORD
+    * @param shift Bits to shift, between 1-63
+    * @return void
+*/
+__forceinline void shift_right128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
+{
+    assert(shift > 0 && shift < 64);
+    l = (l >> shift) | (h << (64 - shift));
+    h >>= shift;
+}
+/**
+    * @brief Left shift a 128 bit integer (inplace).
+    * Limited range, inplace and no parameter checks.
+    * @param l Low QWORD
+    * @param h High QWORD
+    * @param shift Bits to shift, between 1-63
+    * @return void
+*/
+__forceinline void shift_left128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
+{
+    assert(shift > 0 && shift < 64);
+    h = (h << shift) | (l >> (64 - shift));
+    l <<= shift;
+}
+/**
+    * @brief Right shift a 128 bit integer (inplace) with rounding.
+    * Handles any positive shift value.
+    * @param l Low QWORD
+    * @param h High QWORD
+    * @param shift Bits to shift, between 1-inf
+    * @return void
+*/
+__forceinline void shift_right128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
+{
+    assert(shift >= 0);
+    if (shift == 0) return;
+    uint64_t lsb = 0;
+    switch (shift >> 6) {
+    case 0: // 1-63 bit
+        lsb = (shift == 1)  ? (l & 3) << 1 : (l >> (shift - 2)) & 7;
+        l = (l >> shift) | (h << (64 - shift));
+        h >>= shift;
+        break;
+    case 1: // 64-127 bit
+        shift -= 64;
+        lsb = (shift == 1) ? (h & 3) << 1 : (h >> (shift - 2)) & 7;
+        l = h >> (shift - 64);
+        h = 0;
+        break;
+    default: // >127 bit or negative
+        h = l = 0;
+    }
+
+    // Use rounding half to even
+    // Middle bit is the bit that got shifted away.
+    // It get rounded up in 2 cases:
+    //   1) The 2 rightmost bits are b11 (lsb == 3 or 7), this equal to 0.75
+    //   2) The value's msb is 1 (odd number) and the right bits are b10 (0.5) so the result will be an even number
+    if (lsb > 6 || lsb == 3) {
+        ++l; // low will wrap around to zero if overflowed
+        h += l == 0;
+    }
+}
+/**
+    * @brief Left shift a 128 bit integer (inplace).
+    * Handles any positive shift value.
+    * @param l Low QWORD
+    * @param h High QWORD
+    * @param shift Bits to shift, between 1-inf
+    * @return void
+*/
+__forceinline void shift_left128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
+{
+    assert(shift >= 0);
+    if (shift == 0) return;
+
+    switch (shift >> 6) {
+
+    case 0: // 1-63 bit
+        h = (h << shift) | (l >> (64 - shift));
+        l <<= shift;
+        break;
+    case 1: // 64-127 bit
+        h = l << (shift - 64);
+        l = 0;
+        break;
+    default: // >127 bit or negative
+        h = l = 0;
+    }
+}
+
 /**
     * @brief Right shift a 128 bit integer.
     * @param l Low QWORD
@@ -173,6 +288,7 @@ __forceinline uint64_t shift_right64_round(uint64_t x, int shift) noexcept
 */
 __forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
 {
+    assert(shift >= 0 && shift < 128);
     if (shift == 0) return l;
     if (shift < 64) return (l >> shift) | (h << (64 - shift));
     if (shift < 128) return h >> (shift ^ 64);
@@ -187,17 +303,33 @@ __forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcep
 */
 __forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) noexcept
 {
+    assert(shift >= 0 && shift < 128);
     if (shift == 0) return l;
+
+    uint64_t lsb = 0;
+
     if (shift < 64) {
-        const bool need_rounding = (l & 1ull << (shift - 1)) != 0;
-        return need_rounding + ((l >> shift) | (h << (64 - shift)));
+        lsb = (shift == 1) ? (l & 3) << 1 : (l >> (shift - 2)) & 7;
+        l = ((l >> shift) | (h << (64 - shift)));
     }
-    if (shift < 128) {
+    else if (shift < 128) {
         shift ^= 64;
-        const bool need_rounding = (h & 1ull << (shift - 1)) != 0;
-        return need_rounding + (h >> shift);
+        lsb = (shift == 1) ? (h & 3) << 1 : (h >> (shift - 2)) & 7;
+        l = h >> shift;
     }
-    return 0;
+    else
+        return 0;
+
+
+    // Use rounding half to even
+    // Middle bit is the bit that got shifted away.
+    // It get rounded up in 2 cases:
+    //   1) The 2 rightmost bits are b11 (lsb == 3 or 7), this equal to 0.75
+    //   2) The value's msb is 1 (odd number) and the right bits are b10 (0.5) so the result will be an even number
+    if (lsb > 6 || lsb == 3) {
+        ++l; // low will wrap around to zero if overflowed
+    }
+    return l;
 }
 /**
     * @brief Left shift a 128 bit integer.
@@ -208,6 +340,7 @@ __forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) n
 */
 __forceinline uint64_t shift_left128(uint64_t l, uint64_t h, int shift) noexcept
 {
+    assert(shift >= 0 && shift < 128);
     if (shift == 0) return h;
     if (shift < 64) return (h << shift) | (l >> (64 - shift));
     if (shift < 128) return l << (shift - 64);
@@ -240,15 +373,13 @@ FP128_INLINE static int32_t div_32bit(uint32_t* q, uint32_t* r, const uint32_t* 
 
     while (m > 0 && u[m - 1] == 0) --m;
 
-    uint64_t k = 0;
+    uint32_t k = 0;
     for (auto j = m - 1; j >= 0; --j) {
-        k = (k << 32) + u[j];
-        q[j] = static_cast<uint32_t>(k / v);
-        k -= static_cast<uint64_t>(q[j]) * v;
+        q[j] = _udiv64((((uint64_t)k) << 32) + u[j], v, &k);
     }
 
     if (r != nullptr)
-        *r = static_cast<uint32_t>(k);
+        *r = k;
     return 0;
 }
 /**
@@ -401,14 +532,43 @@ FP128_INLINE static int32_t div_64bit(uint64_t* q, uint64_t* r, const uint64_t* 
 
     uint64_t k[2] = {};
     for (auto j = m - 1; j >= 0; --j) {
-        k[1] = k[0];
         k[0] = u[j];
-        q[j] = _udiv128(k[1], k[0], v, &k[0]);
+        q[j] = _udiv128(k[1], k[0], v, &k[1]);
     }
 
-    if (r != nullptr)
-        *r = k[0];
+    // Remainder
+    *r = k[1];
     return 0;
+}
+/**
+ * @brief Counts the number of 1 bits (population count) in a 128-bit unsigned integer.
+ * @param x input value.
+ * @return Number of 1 bits in x.
+*/
+__forceinline uint64_t popcnt128(uint64_t l, uint64_t h) noexcept
+{
+    return __popcnt64(l) + __popcnt64(h);
+}
+/**
+ * @brief Left zero count 128 bit
+ * @param l Low QWORD
+ * @param h High QWORD
+ * @return Left zero count
+*/
+__forceinline uint64_t lzcnt128(uint64_t l, uint64_t h) noexcept
+{
+    return (h != 0) ? __lzcnt64(h) : 64 + __lzcnt64(l);
+}
+/**
+ * @brief Calculates the Log base 2 of x: log2(x)
+ * Rounding is always towards zero so the maximum error is close to 1.
+ * @param l Lower QWORD of the value
+ * @param h Jigh QWORD of the value
+ * @return log2(x). Returns zero when x is zero.
+*/
+__forceinline uint64_t log2(uint64_t l, uint64_t h) noexcept
+{
+    return (h != 0 || l != 0) ? 127 - lzcnt128(l, h) : 0;
 }
 /**
  * @brief Calculates the Log base 2 of x: log2(x)
@@ -429,16 +589,6 @@ __forceinline uint64_t log2(uint64_t x) noexcept
 __forceinline uint32_t log2(uint32_t x) noexcept
 {
     return (x) ? 31ull - __lzcnt(x) : 0;
-}
-
-/**
- * @brief Counts the number of 1 bits (population count) in a 128-bit unsigned integer.
- * @param x input value.
- * @return Number of 1 bits in x.
-*/
-__forceinline uint64_t popcnt128(uint64_t l, uint64_t h) noexcept
-{
-    return __popcnt64(l) + __popcnt64(h);
 }
 
 } //namespace fp128 {

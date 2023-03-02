@@ -178,7 +178,7 @@ CMandelbrotView::~CMandelbrotView()
 */
 BOOL CMandelbrotView::PreCreateWindow(CREATESTRUCT& cs)
 {
-    // TODO: Modify the Window class or styles here by modifying
+    // Modify the Window class or styles here by modifying
     //  the CREATESTRUCT cs
 
     return CView::PreCreateWindow(cs);
@@ -282,7 +282,7 @@ void CMandelbrotView::CreateColorTableFromHistogram(float offset)
  * @param width Width of the image (pixels)
  * @param height Height of the image (pixels)
 */
-void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int height)
+void CMandelbrotView::CreateHistogram(const float* pIterations, int64_t width, int64_t height)
 {
     if (m_Histogram != nullptr)
         delete[] m_Histogram;
@@ -332,15 +332,16 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int width, int h
  * @param width Width of the image (pixels)
  * @param height Height of the image (pixels)
 */
-void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height)
+void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int64_t width, int64_t height)
 {
 
+#ifdef PROFILING
     LARGE_INTEGER time_start, time_end;
     QueryPerformanceCounter(&time_start);
-
-#ifndef DISABLE_OMP 
-#pragma omp parallel for 
-#endif
+#endif 
+//#ifndef DISABLE_OMP 
+//#pragma omp parallel for 
+//#endif
     for (int l = 0; l < height; ++l) {
         //point to start of buffer
         COLORREF* pDibPixel = pBits + width * l;
@@ -352,15 +353,15 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
                 *(pDibPixel++) = 0;
                 continue;
             }
-
-            DWORD index = (DWORD)floor(mu);
+            float mu_i, mu_f = modff(mu, &mu_i);
+            DWORD index = (DWORD)mu_i;
             if (index < 0) {
                 *(pDibPixel++) = m_ColorTable32[0];
             }
             else {
                 COLORREF c1 = m_ColorTable32[index];
                 COLORREF c2 = m_ColorTable32[index + 1];
-                DWORD alpha = (DWORD)(255.0 * (mu - index));
+                DWORD alpha = (DWORD)(256.0 * mu_f);
                 if (alpha > 255)
                     alpha = 255;
                 *(pDibPixel++) = blendAlpha(c1, c2, alpha);
@@ -369,11 +370,9 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
     }
 
 
-    QueryPerformanceCounter(&time_end);
-
 #ifdef PROFILING
+    QueryPerformanceCounter(&time_end);
     DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
-
     CString text;
     text.Format(L"CreateDibFromIterations: (%ims)\n", totalTime);
     OutputDebugString(text);
@@ -393,7 +392,7 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
+void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
                                              const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
 {
     const fixed_8_120_t radius_sq = 2 * 2;
@@ -413,7 +412,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
         fixed_8_120_t usq, vsq, u, v, x, tmp, uv, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : 0u; // no need to do this per pixel for Julia
+        fixed_8_120_t xc = (isJulia) ? cr : fixed_8_120_t(); // no need to do this per pixel for Julia
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         //point to start of buffer
@@ -481,7 +480,7 @@ void CMandelbrotView::DrawImageFixedPoint128(float* pIterations, int width, int 
  * @param cr: Julia constant (Real part)
  * @param ci: Julia constant (Imaginary part)
 */
-void CMandelbrotView::DrawImageDouble(float* pIterations, int width, int height, double x0, double dx, double y0, double dy, double cr, double ci)
+void CMandelbrotView::DrawImageDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy, double cr, double ci)
 {
     const float radius_sq = 2.0 * 2.0;
     const float LOG2 = logf(2.0);
@@ -569,7 +568,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     }
 
     GetClientRect(rect);
-    const int width = rect.Width(), height = rect.Height();
+    const int64_t width = rect.Width(), height = rect.Height();
 
     if (m_IsResizing) {
         if (m_BmpBits != nullptr) {
@@ -583,7 +582,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
             memDC.SelectObject(bmp);
             SetDIBitsToDevice((HDC)(memDC), 0, 0, w, h, 0, 0, 0, h, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
 
-            pDC->StretchBlt(0, 0, width, height, &memDC, 0, 0, w, h, SRCCOPY);
+            pDC->StretchBlt(0, 0, (int)width, (int)height, &memDC, 0, 0, w, h, SRCCOPY);
             return;
         }
     }
@@ -599,8 +598,8 @@ void CMandelbrotView::OnDraw(CDC* pDC)
 
     // allocate new bitmap if needed
     if (nullptr == m_BmpBits) {
-        m_BmpInfo.bmiHeader.biHeight = height;
-        m_BmpInfo.bmiHeader.biWidth = width;
+        m_BmpInfo.bmiHeader.biHeight = (LONG)height;
+        m_BmpInfo.bmiHeader.biWidth = (LONG)width;
         m_BuffLen = (size_t)height * width;
         m_BmpBits = (COLORREF*)malloc(m_BuffLen * sizeof(COLORREF));
         m_Iterations = new float[width * height];
@@ -637,12 +636,12 @@ void CMandelbrotView::OnDraw(CDC* pDC)
         DWORD totalTime = DWORD(1000.0 * (time_end.QuadPart - time_start.QuadPart) / m_Frequency);
         if (m_zoom < 1.0)
             title.Format(L"Zoom x%0.5f (%ims)", m_zoom, totalTime);
-        else if (m_zoom > (1 << 16))
+        else if (m_zoom > (1ull << 16))
             title.Format(L"Zoom x2^%0.0lf (%ims)", log2(m_zoom), totalTime);
         else
             title.Format(L"Zoom x%0.0lf (%ims)", m_zoom, totalTime);
 
-        title += (useDoublePrecision) ? L" using double precision" : L" using high precision (slow)";
+        title += (useDoublePrecision) ? L" using double precision" : L" using high precision (slower)";
         ((CFrameWnd*)AfxGetMainWnd())->SetWindowText(title);
         m_NeedToRecompute = false;
     }
@@ -651,7 +650,7 @@ void CMandelbrotView::OnDraw(CDC* pDC)
     CreateDibFromIterations(m_BmpBits, m_Iterations, width, height);
 
     ASSERT(m_BmpBits != NULL);
-    SetDIBitsToDevice((HDC)(*pDC), 0, 0, width, height, 0, 0, 0, height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
+    SetDIBitsToDevice((HDC)(*pDC), 0, 0, (UINT)width, (UINT)height, 0, 0, 0, (UINT)height, m_BmpBits, &m_BmpInfo, DIB_RGB_COLORS);
 }
 
 
@@ -799,7 +798,7 @@ void CMandelbrotView::CreateColorTables()
 
     m_ColorTable32 = new COLORREF[m_MaxIter + 1];
     if (m_PaletteType == palGrey) {
-        for (size_t i = 1; i <= m_MaxIter; ++i) {
+        for (int64_t i = 1; i <= m_MaxIter; ++i) {
             int c = 255 - (int)(215.0f * (float)i / (float)m_MaxIter);
             m_ColorTable32[i] = RGB(c, c, c);
         }
@@ -836,7 +835,7 @@ void CMandelbrotView::CreateColorTables()
         UINT g = 20;
         UINT b = 255;
 
-        for (size_t i = 1; i <= m_MaxIter; ++i) {
+        for (int64_t i = 1; i <= m_MaxIter; ++i) {
             r = (r + 3) & 0xFF;
             g = (g + 5) & 0xFF;
             b = (b - 3) & 0xFF;
@@ -973,7 +972,7 @@ void CMandelbrotView::OnPrecisionSelect(UINT nID)
 */
 void CMandelbrotView::OnFileSaveImage(UINT nID)
 {
-    int width = 0, height = 0; // TODO: add more resolutions.
+    int64_t width = 0, height = 0; // TODO: add more resolutions.
     switch (nID) {
     case ID_SAVEIMAGE_1920X1080:
         width = 1920, height = 1080;
@@ -990,7 +989,7 @@ void CMandelbrotView::OnFileSaveImage(UINT nID)
     }
 
     CImage image;
-    image.Create(width, -height, 32);
+    image.Create((int)width, (int)(- height), 32);
     CFileDialog dlg(FALSE,                         //bOpenFileDialog,
                     L"png",                        //LPCTSTR lpszDefExt = NULL,
                     L"untitled",                   //LPCTSTR lpszFileName = NULL,
@@ -1084,7 +1083,7 @@ void CMandelbrotView::OnAnimatePalette()
         m_AnimatePalette = true;
         m_TimerID = SetTimer(1, 70, NULL); // timer causes WM_TIMER message
     }
-
+   
     Invalidate(FALSE);
 }
 

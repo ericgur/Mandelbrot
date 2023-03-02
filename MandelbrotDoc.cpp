@@ -59,7 +59,7 @@ BOOL CMandelbrotDoc::OnNewDocument()
     if (!CDocument::OnNewDocument())
         return FALSE;
 
-    // TODO: add reinitialization code here
+    // add reinitialization code here
     // (SDI documents will reuse this document)
 
     return TRUE;

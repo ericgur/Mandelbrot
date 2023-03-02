@@ -84,7 +84,7 @@ public:
 protected:
     fixed_8_120_t m_xmin, m_xmax, m_ymin, m_ymax;
     double m_zoom;
-    int    m_MaxIter;
+    int64_t m_MaxIter;
     BITMAPINFO m_BmpInfo;
     size_t  m_BuffLen;
     COLORREF* m_ColorTable32;
@@ -108,11 +108,11 @@ protected:
     void SetAspectRatio();
     void CreateColorTables();
     void CreateColorTableFromHistogram(float offset);
-    void CreateHistogram(const float* pIterations, int width, int height);
-    void DrawImageDouble(float* pBits, int width, int height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
-    void DrawImageFixedPoint128(float* pBits, int width, int height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
+    void CreateHistogram(const float* pIterations, int64_t width, int64_t height);
+    void DrawImageDouble(float* pBits, int64_t width, int64_t height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
+    void DrawImageFixedPoint128(float* pBits, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
                        const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
-    void CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int width, int height);
+    void CreateDibFromIterations(COLORREF* pBits, const float* pIterations, int64_t width, int64_t height);
     void OnZoomChange(CPoint& point, double zoomMultiplier);
 
     // Generated message map functions
