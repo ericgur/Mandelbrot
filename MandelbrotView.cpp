@@ -56,6 +56,8 @@ double y_init[] = {0.2097799200, 0.2098570171};
 double zoom_init = 32768;
 #endif
 
+#define BGR(b, g, r)          ((COLORREF)(((BYTE)(r) | ((WORD)((BYTE)(g)) << 8)) | (((DWORD)(BYTE)(b)) << 16)))
+
 //inline COLORREF blendAlpha(COLORREF a, COLORREF b, DWORD alpha)
 //{
 //    //res = A + (B–A) * alpha
@@ -228,47 +230,75 @@ void CMandelbrotView::OnExitSizeMove()
 */
 void CMandelbrotView::CreateColorTableFromHistogram(float offset)
 {
-    float* hues = new float[m_MaxIter + 1ull];
-    ZeroMemory(hues, sizeof(float) * (m_MaxIter + 1ull));
-
+    double* hues = new double[m_MaxIter + 1ull];
+    ZeroMemory(hues, sizeof(double) * (m_MaxIter + 1ull));
+    double hue_thr = 0.07f;
     // normalize the iterations
     int total = 0;
-    for (int i = 0; i < m_MaxIter; ++i) { // not counting the max iteration score (always black)
+    int item_count = 0;  // counts non-zero histogram items
+    
+    // not counting the max iteration score (always black)
+    for (int i = 0; i < m_MaxIter; ++i) {
         total += m_Histogram[i];
     }
 
-    float hue = 0;
+    double hue = 0;
     for (int i = 0; i < m_MaxIter; ++i) {
-        hue += (float)m_Histogram[i] / total;
+        int item = m_Histogram[i];
+        if (item == 0) {
+            hues[i] = -1.0f; // mark as invalid hue
+            continue;
+        }
+
+        double d = (double)m_Histogram[i] / total;
+        if (d > hue_thr)
+            d = hue_thr;
+        ++item_count;
         hues[i] = min(hue, 1.f);
+        hue += d;
     }
-    hues[m_MaxIter] = min(hue, 1.f);
+
+    // stretch the histogram by spreading the error
+    double err = (1.0f - hue) / item_count;
+    for (int i = 0; i < m_MaxIter; ++i) {
+        if (hues[i] >= 0)
+            hues[i] += err * i;
+    }
 
     // create HSV to COLORREF table
-    for (int i = 0; i <= m_MaxIter; ++i) {
-        float h = offset + hues[i] * 6;
-        float x = (1.0f - abs(fmodf(h, 2) - 1.0f));
-        switch ((int)floorf(h) % 6) {
-        case 0: // 0-60 
-            m_ColorTable32[i] = RGB(255, int(x * 255), 0);
+    for (int i = 0; i < m_MaxIter; ++i) {
+        // calculate the hue with the offset and normalize to the [0,1) range
+        double h = hues[i];
+        if (h < 0)
+            continue;
+        h += offset;
+        if (h >= 1)
+            h -= 1;
+        double section;
+        double x = modf(h * 6, &section);
+        int val = int(x * 255);
+        // select the exact color 
+        switch (int(section) % 6) {
+        case 0: // 0-60 Blue -> Magenta
+            m_ColorTable32[i] = BGR(val, 0, 255);
             break;
-        case 1: // 60-120
-            m_ColorTable32[i] = RGB(int(x * 255), 255, 0);
+        case 1: // 60-120 Magenta -> Red
+            m_ColorTable32[i] = BGR(255, 0, 255 - val);
             break;
-        case 2: // 120-180 
-            m_ColorTable32[i] = RGB(0, 255, int(x * 255));
+        case 2: // 120-180 Red -> Yellow
+            m_ColorTable32[i] = BGR(255, val, 0);
             break;
-        case 3: // 180-240
-            m_ColorTable32[i] = RGB(0, int(x * 255), 255);
+        case 3: // 180-240 Yellow -> Green
+            m_ColorTable32[i] = BGR(255 - val, 255, 0);
             break;
-        case 4: // 240-300
-            m_ColorTable32[i] = RGB(int(x * 255), 0, 255);
+        case 4: // 240-300 Green -> Cyan
+            m_ColorTable32[i] = BGR(0, 255, val);
             break;
-        case 5: // 300-360
-            m_ColorTable32[i] = RGB(255, 0, int(x * 255));
+        case 5: // 300-360 Cyan -> Blue
+            m_ColorTable32[i] = BGR(0, 255 - val, 255);
             break;
         default: //bug
-            m_ColorTable32[i] = RGB(255, 255, 255);
+            m_ColorTable32[i] = BGR(255, 255, 255);
         }
     }
 
@@ -294,14 +324,14 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int64_t width, i
 #pragma omp parallel 
     {
         // thread local variables.
-        thread_local int* histogram_private = new int[m_MaxIter + 1];
+        int* histogram_private = new int[m_MaxIter + 1];
         if (histogram_private == nullptr) {
             assert(histogram_private != nullptr);
             error = true;
         }
         else {
             ZeroMemory(histogram_private, sizeof(int) * (m_MaxIter + 1));
-        #pragma omp for
+            #pragma omp for
             for (int l = 0; l < height; ++l) {
                 const float* pIter = pIterations + width * l;
                 for (int k = 0; k < width; ++k) {
@@ -313,7 +343,7 @@ void CMandelbrotView::CreateHistogram(const float* pIterations, int64_t width, i
                     ++pIter;
                 }
             }
-        #pragma omp critical 
+            #pragma omp critical 
             {
                 for (int i = 0; i < m_MaxIter; ++i)
                     m_Histogram[i] += histogram_private[i];
@@ -357,6 +387,9 @@ void CMandelbrotView::CreateDibFromIterations(COLORREF* pBits, const float* pIte
             DWORD index = (DWORD)mu_i;
             if (index < 0) {
                 *(pDibPixel++) = m_ColorTable32[0];
+            }
+            if (index == m_MaxIter - 1) {
+                *(pDibPixel++) = m_ColorTable32[index];
             }
             else {
                 COLORREF c1 = m_ColorTable32[index];
@@ -844,6 +877,7 @@ void CMandelbrotView::CreateColorTables()
     }
 
     m_ColorTable32[0] = RGB(255, 255, 255);
+    m_ColorTable32[m_MaxIter] = 0; // black
 }
 
 
@@ -1101,7 +1135,7 @@ void CMandelbrotView::OnTimer(UINT_PTR nIDEvent)
     if (nIDEvent == m_TimerID) {
         COLORREF* pBuff = new COLORREF[m_MaxIter + 1];
         if (m_PaletteType == palHistogram) {
-            m_HsvOffset += 0.1f;
+            m_HsvOffset += 1.0f / 30;
             CreateColorTableFromHistogram(m_HsvOffset);
         }
         else {
