@@ -32,5 +32,6 @@
 #define PCH_H
 
 #include "framework.h"
+#include "afxdialogex.h"
 
 #endif //PCH_H

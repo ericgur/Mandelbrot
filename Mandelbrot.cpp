@@ -28,7 +28,6 @@
 #include "pch.h"
 #include "Mandelbrot.h"
 #include "MainFrm.h"
-
 #include "MandelbrotDoc.h"
 #include "MandelbrotView.h"
 

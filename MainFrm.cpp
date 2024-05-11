@@ -28,7 +28,6 @@
 #include "pch.h"
 #include "framework.h"
 #include "Mandelbrot.h"
-
 #include "MainFrm.h"
 
 #ifdef _DEBUG

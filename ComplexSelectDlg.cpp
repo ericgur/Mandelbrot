@@ -27,7 +27,6 @@
 
 #include "pch.h"
 #include "Mandelbrot.h"
-#include "afxdialogex.h"
 #include "ComplexSelectDlg.h"
 
 
