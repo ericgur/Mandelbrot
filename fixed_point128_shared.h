@@ -21,9 +21,9 @@
     OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
     SOFTWARE.
 ************************************************************************************/
-#ifndef FIXED_POINT128_SHARED_H
-#define FIXED_POINT128_SHARED_H
+#pragma once
 
+#include <intrin.h>
 #include <immintrin.h>
 #include <string>
 #include <cstdint>
@@ -73,7 +73,7 @@ static constexpr bool FP128_USE_RECIPROCAL_FOR_DIVISION = true;
 
 
 #define FP128_ONE_SHIFT(x)          (1ull << (x))
-#define FP128_MAX_VALUE_64(x)       (((uint64_t)-1ll) >> (64 - (x)))
+#define FP128_MAX_VALUE_64(x)       (UINT64_MAX >> (64 - (x)))
 #define FP128_GET_BIT(x, n)         (((x) >> (n)) & 1)
 #define FP128_GET_BITS(x, b, count) (((x) >> (b)) & FP128_MAX_VALUE_64(count))
 #define FP128_INT_DIVIDE_BY_ZERO_EXCEPTION   throw std::logic_error("Integer divide by zero!")
@@ -592,4 +592,3 @@ __forceinline uint32_t log2(uint32_t x) noexcept
 }
 
 } //namespace fp128 {
-#endif // FIXED_POINT128_SHARED_H
