@@ -1,0 +1,90 @@
+<?xml version="1.0" encoding="utf-8"?> 
+<!-- local schema path: C:\Program Files\Microsoft Visual Studio\2022\Professional\Xml\Schemas\1033\natvis.xsd -->
+<AutoVisualizer xmlns="http://schemas.microsoft.com/vstudio/debugger/natvis/2010">
+	<Type Name="fp128::fixed_point128&lt;*&gt;">
+    <Intrinsic Name="low_fraction" Expression="(double)(low &gt;&gt; 32) * lower_unity_h + (double)(low &amp; 0xFFFFFFFF) * lower_unity_l" />
+    <DisplayString>{((sign) ? -1.0 : 1.0) * (double)high * upper_unity + low_fraction()}</DisplayString>
+    <Expand HideRawView="true" >
+      <Item Name="[sign]" ExcludeView="simple">sign,d</Item>
+			<Item Name="[low (hex)]"  ExcludeView="simple">low,h</Item>
+			<Item Name="[high (hex)]" ExcludeView="simple">high,h</Item>
+			<Item Name="[low]"  ExcludeView="simple">low,d</Item>
+			<Item Name="[high]" ExcludeView="simple">high,d</Item>
+		</Expand>
+	</Type>
+  <Type Name="fp128::uint128_t">
+    <DisplayString>{high,h}{low,hb}</DisplayString>
+    <Expand HideRawView="true" >
+      <Item Name="[low (hex)]"  ExcludeView="simple">low,h</Item>
+      <Item Name="[high (hex)]" ExcludeView="simple">high,h</Item>
+      <Item Name="[low]"  ExcludeView="simple">low,d</Item>
+      <Item Name="[high]" ExcludeView="simple">high,d</Item>
+    </Expand>
+  </Type>
+  <Type Name="fp128::int128_t">
+    <Intrinsic Name="sign" Expression="(high >> 63) == 1" />
+    <Intrinsic Name="sign_int" Expression="(sign()) ? -1 : 1" />
+    <Intrinsic Name="comp_low" Expression="~low + 1" />
+    <Intrinsic Name="comp_high" Expression="(int)(comp_low() == 0) + ~high" />
+    <DisplayString Condition="sign()">-{comp_high(),h}{comp_low(),hb}</DisplayString>
+    <DisplayString>{high,h}{low,hb}</DisplayString>
+    <Expand HideRawView="true" >
+      <Item Name="[low (hex)]"  ExcludeView="simple">low,h</Item>
+      <Item Name="[high (hex)]" ExcludeView="simple">high,h</Item>
+      <Item Name="[low]"  ExcludeView="simple">low,d</Item>
+      <Item Name="[high]" ExcludeView="simple">high,d</Item>
+      <!-- <Item Name="[Value]" ExcludeView="simple">this-&gt;to_string()</Item> -->
+    </Expand>
+  </Type>
+  <Type Name="fp128::float128">
+    <Intrinsic Name="special" Expression="high_bits.e == 0x7FFF" />
+    <Intrinsic Name="has_fraction" Expression="high_bits.f != 0 || low != 0" />
+    <Intrinsic Name="inf" Expression="special() &amp;&amp; !has_fraction()" />
+    <Intrinsic Name="nan" Expression="special() &amp;&amp; has_fraction()" />
+    <Intrinsic Name="sign" Expression="high_bits.s" />
+    <Intrinsic Name="sign_float" Expression="(sign()) ? -1.0 : 1.0" />
+    <Intrinsic Name="exp" Expression="(int)high_bits.e - (int)0x3FFF" />
+    <Intrinsic Name="exp_inc" Expression="(exp() &lt; 0 ) ? -1 : 1" />
+    <Intrinsic Name="low_fraction" Expression="(double)(low &gt;&gt; 32) * 8.271806125530277e-25 + (double)(low &amp; 0xFFFFFFFF) * 1.925929944387236e-34" />
+    <Intrinsic Name="fraction" Expression="1.0 + (double)high_bits.f * 3.552713678800501e-15 + low_fraction()" />
+    <Intrinsic Name="zero" Expression="low == 0 &amp;&amp; high == 0" />
+    <Intrinsic Name="neg_zero" Expression="low == 0 &amp;&amp; high_bits.f == 0  &amp;&amp; high_bits.e == 0 &amp;&amp; high_bits.s == 1" />
+    <DisplayString Condition="nan() &amp;&amp; !sign()">nan</DisplayString>
+    <DisplayString Condition="nan() &amp;&amp; sign()">-nan</DisplayString>
+    <DisplayString Condition="inf() &amp;&amp; !sign()">inf</DisplayString>
+    <DisplayString Condition="inf() &amp;&amp; sign()">-inf</DisplayString>
+    <DisplayString Condition="zero()">0</DisplayString>
+    <DisplayString Condition="neg_zero()">-0</DisplayString>
+    <DisplayString>{sign_float() * fraction()}*2**{(int)high_bits.e - (int)0x3FFF,d}</DisplayString>
+    <Expand HideRawView="false" >
+      <CustomListItems MaxItemsPerView="1" ExcludeView="Test">
+        <Variable Name="exp_value" InitialValue="exp()" />
+        <Variable Name="res" InitialValue="fraction() * sign_float()" />
+        <!--  loop and mul/div the fraction by 2 until the exponent is zero. res has the final result -->
+        <Loop>
+          <If Condition="exp_value &gt; 0">
+            <Exec>exp_value--</Exec>
+            <Exec>res *= 2.0</Exec>
+          </If>
+          <If Condition="exp_value &lt; 0">
+            <Exec>exp_value++</Exec>
+            <Exec>res /= 2.0</Exec>
+          </If>
+          <Break Condition="exp_value == 0" />
+        </Loop>
+        <Item Name="[double value]" Condition="!special()">res,d</Item>
+        <Item Name="[double value]" Condition="nan() &amp;&amp; !sign()">"nan", sb</Item>
+        <Item Name="[double value]" Condition="nan() &amp;&amp; sign()">"-nan", sb</Item>
+        <Item Name="[double value]" Condition="inf() &amp;&amp; !sign()">"inf", sb</Item>
+        <Item Name="[double value]" Condition="inf() &amp;&amp; sign()">"-inf", sb</Item>
+      </CustomListItems>
+      <Item Name="[sign]"            ExcludeView="simple">high_bits.s,d</Item>
+      <Item Name="[exponent (hex)]"  ExcludeView="simple">high_bits.e,h</Item>
+      <Item Name="[frac high (hex)]" ExcludeView="simple">high_bits.f,h</Item>
+      <Item Name="[frac low (hex)]"  ExcludeView="simple">low,h</Item>
+      <Item Name="[exponent]"  ExcludeView="simple">exp(),d</Item>
+      <Item Name="[frac high]" ExcludeView="simple">high_bits.f,d</Item>
+      <Item Name="[frac low]"  ExcludeView="simple">low,d</Item>
+    </Expand>
+  </Type>
+</AutoVisualizer>
