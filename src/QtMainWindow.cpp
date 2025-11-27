@@ -80,6 +80,9 @@ void QtMainWindow::createActions()
     connect(ui.actionJuliaSetOptions, &QAction::triggered, juliaOptionsDialog, &QJuliaSetOptions::show);
     connect(juliaOptionsDialog, &QJuliaSetOptions::juliaConstantChanged, m_centralWidget, &QMandelbrotWidget::setJuliaConstant);
 
+    // OpenMP support
+    connect(ui.actionOpenMP, &QAction::toggled, m_centralWidget, &QMandelbrotWidget::setOpenMp);
+    m_centralWidget->setOpenMp(ui.actionOpenMP->isChecked());
 
     // default precision
     ui.actionPrecisionAuto->setChecked(true);

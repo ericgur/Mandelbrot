@@ -84,12 +84,12 @@ template<int32_t I> fixed_point128<I> acos(fixed_point128<I> x) noexcept;
 template<int32_t I> fixed_point128<I> tan(fixed_point128<I> x) noexcept;
 template<int32_t I> fixed_point128<I> atan(fixed_point128<I> x) noexcept;
 template<int32_t I> fixed_point128<I> atan2(fixed_point128<I> y, fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> sinh(fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> asinh(fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> cosh(fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> acosh(fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> tanh(fixed_point128<I> x) noexcept;
-template<int32_t I> fixed_point128<I> atanh(fixed_point128<I> x) noexcept;
+template<int32_t I> fixed_point128<I> sinh(const fixed_point128<I>& x) noexcept;
+template<int32_t I> fixed_point128<I> asinh(const fixed_point128<I>& x) noexcept;
+template<int32_t I> fixed_point128<I> cosh(const fixed_point128<I>& x) noexcept;
+template<int32_t I> fixed_point128<I> acosh(const fixed_point128<I>& x) noexcept;
+template<int32_t I> fixed_point128<I> tanh(const fixed_point128<I>& x) noexcept;
+template<int32_t I> fixed_point128<I> atanh(const fixed_point128<I>& x) noexcept;
 template<int32_t I> fixed_point128<I> exp(const fixed_point128<I>& x) noexcept;
 template<int32_t I> fixed_point128<I> exp2(const fixed_point128<I>& x) noexcept;
 template<int32_t I> fixed_point128<I> expm1(const fixed_point128<I>& x) noexcept;
@@ -675,7 +675,7 @@ public:
      * @param other Right hand side operand
      * @return This object.
     */
-    FP128_INLINE fixed_point128& operator+=(const fixed_point128& other) noexcept {
+    FP128_FORCE_INLINE fixed_point128& operator+=(const fixed_point128& other) noexcept {
         // same sign: the simple case
         if (other.sign == sign) {
             //add the other value
@@ -720,7 +720,7 @@ public:
      * @param other Right hand side operand
      * @return This object.
     */
-    FP128_INLINE fixed_point128& operator-=(const fixed_point128& other) noexcept {
+    FP128_FORCE_INLINE fixed_point128& operator-=(const fixed_point128& other) noexcept {
 
         // different sign: just add the values
         if (other.sign != sign) {
@@ -764,7 +764,7 @@ public:
      * @param other Right hand side operand
      * @return This object.
     */
-    FP128_INLINE fixed_point128& operator*=(const fixed_point128& other) noexcept{
+    FP128_FORCE_INLINE fixed_point128& operator*=(const fixed_point128& other) noexcept{
         // Temporary arrays to store the result. They are uninitialzied to get 10-50% extra performance.
         // Zero initialization is a 10% penalty and using a thread_local static varible lowers
         //  performance by >50%.
@@ -1841,7 +1841,7 @@ private:
         for (; i < max_iterations && (y_prev != y) && (xy < xy_min || xy > xy_max); ++i) {
             y_prev = y;
             xy = x * y;
-            //y = y * (two - xy);
+            //y = y * (two - x * y);
             y *= two - xy;
         }
 

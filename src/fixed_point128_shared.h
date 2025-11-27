@@ -43,8 +43,10 @@
 
 #if FP128_DISABLE_INLINE != FALSE
 #define FP128_INLINE __declspec(noinline)
+#define FP128_FORCE_INLINE __declspec(noinline)
 #else
 #define FP128_INLINE inline
+#define FP128_FORCE_INLINE __forceinline
 #endif
 
 

@@ -33,6 +33,7 @@ public:
     void saveImage(int width, int height);
     std::complex<double> juliaConstant() const { return m_JuliaConstant; }
     void setSetType(set_type_t type);
+    bool openMp() const { return m_UseOpenMP; }
 
 signals:
     void renderDone(FrameStats stats);
@@ -42,12 +43,13 @@ public slots:
     void resetView();
     void zoomIn();
     void zoomOut();
-    void setAnimatePalette(bool animate);
-    void setPrecision(Precision p);
-    void setMaximumIterations(int64_t maxIter);
     void animationTick();
     void panHorizontal(double amount);
     void panVertical(double amount);
+    void setAnimatePalette(bool animate);
+    void setPrecision(Precision p);
+    void setMaximumIterations(int64_t maxIter);
+    void setOpenMp(bool enable) { m_UseOpenMP = enable; }
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -86,6 +88,9 @@ private:
     
     // Timer for animation
     QChronoTimer m_Timer;
+
+    // OpenMP support
+    bool m_UseOpenMP = true;
 
     // helpers
     void SetDefaultValues();

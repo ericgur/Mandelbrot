@@ -224,7 +224,7 @@ void QMandelbrotWidget::CreateHistogram(const float* pIterations, int64_t width,
     m_Histogram = new int[m_MaxIter + 1ull];
     memset(m_Histogram, 0, sizeof(int) * (m_MaxIter + 1ull));
 
-#pragma omp parallel 
+#pragma omp parallel if (m_UseOpenMP)
     {
         int* histogram_private = new int[m_MaxIter + 1];
         if (histogram_private != nullptr) {
@@ -301,7 +301,7 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
         xTable[i] = x0 + (double)i * dx;
     }
 
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic) if (m_UseOpenMP)
     for (int l = 0; l < h; ++l) {
         double y = y0 + (dy * l);
         double usq = 0, vsq = 0, u = 0, v = 0;
@@ -377,7 +377,7 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
         xTable[i] = x0 + dx * i;
     }
 
-    #pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic) if (m_UseOpenMP)
     for (int l = 0; l < height; ++l) {
         fp128_t y = y0 + (dy * l);
         fp128_t usq, vsq, u, v, x, tmp, modulus;
@@ -577,11 +577,13 @@ void QMandelbrotWidget::resetView()
 
 void QMandelbrotWidget::zoomIn()
 {
+    m_ZoomLevel *= 2.0;
     OnZoomChange(QPoint(width() / 2, height() / 2), m_ZoomIncrement);
 }
 
 void QMandelbrotWidget::zoomOut()
 {
+    m_ZoomLevel /= 2.0;
     OnZoomChange(QPoint(width() / 2, height() / 2), 1.0 / m_ZoomIncrement);
 }
 

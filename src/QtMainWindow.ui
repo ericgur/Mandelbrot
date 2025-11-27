@@ -133,6 +133,8 @@ QProgressBar::chunk {
     <addaction name="actionIter1024"/>
     <addaction name="actionIter1536"/>
     <addaction name="actionIter2048"/>
+    <addaction name="separator"/>
+    <addaction name="actionOpenMP"/>
    </widget>
    <addaction name="menuFile"/>
    <addaction name="menuOptions"/>
@@ -194,17 +196,6 @@ QProgressBar::chunk {
   <action name="action">
    <property name="text">
     <string>...</string>
-   </property>
-  </action>
-  <action name="actionOpenMP">
-   <property name="checkable">
-    <bool>true</bool>
-   </property>
-   <property name="checked">
-    <bool>true</bool>
-   </property>
-   <property name="text">
-    <string>OpenMP</string>
    </property>
   </action>
   <action name="actionSaveImage1920x1080">
@@ -398,6 +389,17 @@ QProgressBar::chunk {
    </property>
    <property name="text">
     <string>Auto</string>
+   </property>
+  </action>
+  <action name="actionOpenMP">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="checked">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>OpenMP</string>
    </property>
   </action>
  </widget>
