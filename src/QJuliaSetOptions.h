@@ -10,14 +10,13 @@ class QJuliaSetOptions : public QDialog
 
 public:
     QJuliaSetOptions(QWidget *parent = nullptr);
-    ~QJuliaSetOptions();
+    ~QJuliaSetOptions() {}
 
     void setConstant(std::complex<double> constant) {
         ui.real->setText(QString::number(constant.real()));
         ui.imag->setText(QString::number(constant.imag()));
     }
 
-    std::complex<double> c;
 
 signals:
     void juliaConstantChanged(std::complex<double>);
@@ -27,10 +26,8 @@ private slots:
     void onApplyButtonClicked();
     void valueChanged();
 
-protected:
-    void accept() override;
-
 private:
     Ui_QJuliaSetOptions ui;
+    std::complex<double> c;
 };
 

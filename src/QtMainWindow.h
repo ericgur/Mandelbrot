@@ -23,6 +23,9 @@ private slots:
     void onActionJuliaOptions();
     void onRenderDone(FrameStats stats);
 
+protected:
+    void keyPressEvent(QKeyEvent* event) override;
+
 private:
     void createActions();
 

@@ -31,7 +31,7 @@ public:
     explicit QMandelbrotWidget(QWidget* parent = nullptr);
     virtual ~QMandelbrotWidget();
     void saveImage(int width, int height);
-    std::complex<double> juliaConstant() const { return std::complex<double>(m_JuliaCr, m_JuliaCi); }
+    std::complex<double> juliaConstant() const { return m_JuliaConstant; }
     void setSetType(set_type_t type);
 
 signals:
@@ -40,10 +40,14 @@ signals:
 public slots:
     void setJuliaConstant(const std::complex<double>& c);
     void resetView();
+    void zoomIn();
+    void zoomOut();
     void setAnimatePalette(bool animate);
     void setPrecision(Precision p);
     void setMaximumIterations(int64_t maxIter);
     void animationTick();
+    void panHorizontal(double amount);
+    void panVertical(double amount);
 
 protected:
     void paintEvent(QPaintEvent* event) override;
@@ -54,31 +58,33 @@ private:
     int64_t calcAutoIterationLimits();
 
     // View state (ported from CMandelbrotView)
-    fixed_8_120_t m_xmin, m_xmax, m_ymin, m_ymax;
-    double m_zoom;
+    fixed_8_120_t m_Xmin, m_Xmax, m_Ymin, m_Ymax;
+    double m_ZoomLevel;
+    double m_ZoomIncrement = 2.0;
     int64_t m_MaxIter = 128;
     bool m_AutoIterations = false;
 
     // image and buffers
-    QImage m_image;
-    float* m_Iterations = nullptr; // will allocate as needed
+    QImage m_ImageCache;
+    float* m_Iterations = nullptr; // will allocate when needed
     bool m_NeedToRecompute = true;
 
     // color / palette data
-    QVector<QRgb> m_colorTable;
+    QVector<QRgb> m_ColorTable;
     int* m_Histogram = nullptr;
     float m_HsvOffset = 0;
     palette_t m_PaletteType = palGradient;
     bool m_SmoothLevel = true;
 
     // UI flags
-    Precision m_precision = Precision::Auto;
-    bool m_animate = false;
+    Precision m_Precision = Precision::Auto;
+    bool m_Animate = false;
 
     // set type and julia constants
     set_type_t m_SetType = stMandelbrot;
-    double m_JuliaCr = 0.285, m_JuliaCi = 0.01;
-
+    std::complex<double> m_JuliaConstant{ 0.285, 0.01 };
+    
+    // Timer for animation
     QChronoTimer m_Timer;
 
     // helpers
@@ -91,7 +97,7 @@ private:
     void CreateColorTableFromHistogram(float offset);
     void CreateHistogram(const float* pIterations, int64_t width, int64_t height);
     void CreateDibFromIterations(QImage& img, const float* pIterations, int64_t width, int64_t height);
-    void DrawImageDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy, double cr = 0, double ci = 0);
+    void DrawImageDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy);
     void DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
-                       const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci);
+                       const fixed_8_120_t& dy);
 };

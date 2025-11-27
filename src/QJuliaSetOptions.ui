@@ -3,18 +3,24 @@
  <class>QJuliaSetOptions</class>
  <widget class="QDialog" name="QJuliaSetOptions">
   <property name="windowModality">
-   <enum>Qt::WindowModality::WindowModal</enum>
+   <enum>Qt::WindowModality::NonModal</enum>
   </property>
   <property name="geometry">
    <rect>
     <x>0</x>
     <y>0</y>
-    <width>574</width>
+    <width>415</width>
     <height>244</height>
    </rect>
   </property>
   <property name="windowTitle">
    <string>Julia Set Options</string>
+  </property>
+  <property name="autoFillBackground">
+   <bool>true</bool>
+  </property>
+  <property name="sizeGripEnabled">
+   <bool>true</bool>
   </property>
   <property name="modal">
    <bool>false</bool>
@@ -55,6 +61,13 @@
       </widget>
      </item>
     </layout>
+   </item>
+   <item>
+    <widget class="QLabel" name="label_3">
+     <property name="text">
+      <string>Presets</string>
+     </property>
+    </widget>
    </item>
    <item>
     <widget class="QComboBox" name="presets"/>

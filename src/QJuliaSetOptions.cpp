@@ -1,6 +1,5 @@
 #include "pch.h"
 #include "QJuliaSetOptions.h"
-#include <QDoubleValidator>
 
 using namespace std;
 
@@ -10,7 +9,7 @@ constexpr array presets = {
     complex<double>(-0.8, 0.156),
     complex<double>(-0.4, 0.6),
     complex<double>(0.0, -0.8),
-    complex<double>(0.45, 0.1428),
+    complex<double>(0.39, 0.18),
     complex<double>(-0.70176, -0.3842),
     complex<double>(-0.75, 0.11),
     complex<double>(-0.1, 0.651),
@@ -23,8 +22,8 @@ QJuliaSetOptions::QJuliaSetOptions(QWidget *parent)
 {
     ui.setupUi(this);
 
-    ui.real->setValidator(new QDoubleValidator(-2, 2, 5, this));
-    ui.imag->setValidator(new QDoubleValidator(-2, 2, 5, this));
+    ui.real->setValidator(new QDoubleValidator(-2, 2, 10, this));
+    ui.imag->setValidator(new QDoubleValidator(-2, 2, 10, this));
     ui.real->setText(QString::number(c.real()));
     ui.imag->setText(QString::number(c.imag()));
     for (const auto& p : presets) {
@@ -35,9 +34,6 @@ QJuliaSetOptions::QJuliaSetOptions(QWidget *parent)
     connect(ui.real, &QLineEdit::textChanged, this, &QJuliaSetOptions::valueChanged);
     connect(ui.imag, &QLineEdit::textChanged, this, &QJuliaSetOptions::valueChanged);
 }
-
-QJuliaSetOptions::~QJuliaSetOptions()
-{}
 
 void QJuliaSetOptions::onApplyButtonClicked()
 {
@@ -51,12 +47,6 @@ void QJuliaSetOptions::valueChanged()
     if (ui.checkAutoApply->isChecked()) {
         emit juliaConstantChanged(c);
     }
-}
-
-void QJuliaSetOptions::accept()
-{
-    c = std::complex<double>(ui.real->text().toDouble(), ui.imag->text().toDouble());
-    QDialog::accept();
 }
 
 void QJuliaSetOptions::onPresetChanged(int index)

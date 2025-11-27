@@ -1,5 +1,6 @@
 #include "pch.h"
 #include <cmath>
+#include <QKeyEvent>
 #include <QActionGroup>
 #include "QtMainWindow.h"
 #include "QMandelbrotWidget.h"
@@ -164,4 +165,33 @@ void QtMainWindow::onRenderDone(FrameStats stats)
         .arg(stats.size.height())
         .arg(stats.max_iterations);
     statusBar()->showMessage(msg);
+}
+
+void QtMainWindow::keyPressEvent(QKeyEvent* event)
+{
+    constexpr double panAmount = 0.05;
+    switch (event->key()) {
+        case Qt::Key_Up:
+        m_centralWidget->panVertical(-panAmount);
+        break;
+        case Qt::Key_Down:
+            m_centralWidget->panVertical(panAmount);
+            break;
+        case Qt::Key_Right:
+            m_centralWidget->panHorizontal(panAmount);
+            break;
+        case Qt::Key_Left:
+            m_centralWidget->panHorizontal(-panAmount);
+            break;
+        case Qt::Key_Plus:
+            m_centralWidget->zoomIn();
+            break;
+        case Qt::Key_Minus:
+            m_centralWidget->zoomOut();
+            break;
+        default:
+            break;
+    }
+
+    QMainWindow::keyPressEvent(event);
 }

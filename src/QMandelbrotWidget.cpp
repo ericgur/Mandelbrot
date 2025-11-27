@@ -2,25 +2,18 @@
 #include "QMandelbrotWidget.h"
 #include <QPainter>
 #include <QFileDialog>
-#include <QImageWriter>
 #include <QMouseEvent>
 #include <QElapsedTimer>
 #include <cmath>
-#include <algorithm>
 
 using namespace std;
 
-static inline constexpr QRgb BGR_to_QRgb(int b, int g, int r)
+static inline QRgb blendAlphaQRgb(QRgb c1, QRgb c2, unsigned int alpha)
 {
-    return qRgb(r, g, b);
-}
-
-static inline QRgb blendAlphaQRgb(QRgb colora, QRgb colorb, unsigned int alpha)
-{
-    unsigned int rb1 = (0x100 - alpha) * ((colora & 0xFF00FF));
-    unsigned int rb2 = alpha * ((colorb & 0xFF00FF));
-    unsigned int g1 = (0x100 - alpha) * ((colora & 0x00FF00));
-    unsigned int g2 = alpha * ((colorb & 0x00FF00));
+    unsigned int rb1 = (0x100 - alpha) * ((c1 & 0xFF00FF));
+    unsigned int rb2 = alpha * ((c2 & 0xFF00FF));
+    unsigned int g1 = (0x100 - alpha) * ((c1 & 0x00FF00));
+    unsigned int g2 = alpha * ((c2 & 0x00FF00));
     unsigned int rb = (((rb1 + rb2) >> 8) & 0xFF00FF);
     unsigned int g = (((g1 + g2) >> 8) & 0x00FF00);
     return (QRgb)(rb | g);
@@ -30,7 +23,6 @@ QMandelbrotWidget::QMandelbrotWidget(QWidget* parent)
     : QWidget(parent),
     m_Timer(this)
 {
-    //setAutoFillBackground(true);
     SetDefaultValues();
     CreateColorTables();
     connect(&m_Timer, &QChronoTimer::timeout, this, &QMandelbrotWidget::animationTick);
@@ -45,34 +37,33 @@ QMandelbrotWidget::~QMandelbrotWidget()
 void QMandelbrotWidget::SetDefaultValues()
 {
 #ifdef INITIAL_POINT
-    m_xmin = x_init[0];
-    m_xmax = x_init[1];
-    m_ymin = y_init[0];
-    m_ymax = y_init[1];
-    m_zoom = zoom_init;
+    m_Xmin = x_init[0];
+    m_Xmax = x_init[1];
+    m_Ymin = y_init[0];
+    m_Ymax = y_init[1];
+    m_ZoomLevel = zoom_init;
 #else
-    m_xmax = 2.5;
-    m_xmin = -m_xmax;
-    m_ymax = m_ymin = 0;
-    m_zoom = 1;
+    m_Xmax = 2.5;
+    m_Xmin = -m_Xmax;
+    m_Ymax = m_Ymin = 0;
+    m_ZoomLevel = 1;
 #endif
     SetAspectRatio();
 }
 
 void QMandelbrotWidget::SetAspectRatio()
 {
-    QRect r = rect();
+    QSize s = size();
 
-    //use m_xmin, m_xmax and m_rect to determine m_ymin and m_ymax
-    //check if window created
-    if (0 == r.height())
+    // use m_Xmin, m_Xmax and m_rect to determine m_Ymin and m_Ymax
+    // check if window created
+    if (0 == s.height())
         return;
 
-    fixed_8_120_t ratio = (double)r.height() / r.width();
-    fixed_8_120_t ysize = (m_xmax - m_xmin) * (ratio >> 1);
-    m_ymin = ((m_ymax + m_ymin) >> 1) - ysize;
-    m_ymax = m_ymin + (ysize << 1);
-    // DebugPrint(L"SetAspectRatio: ysize=%lf, m_ymin=%lf, m_ymax=%lf\n", (double)ysize, (double)m_ymin, (double)m_ymax);
+    fixed_8_120_t ratio = (double)s.height() / s.width();
+    fixed_8_120_t ysize = (m_Xmax - m_Xmin) * (ratio >> 1);
+    m_Ymin = ((m_Ymax + m_Ymin) >> 1) - ysize;
+    m_Ymax = m_Ymin + (ysize << 1);
 }
 
 void QMandelbrotWidget::OnZoomChange(const QPoint& point, double zoomMultiplier)
@@ -80,38 +71,34 @@ void QMandelbrotWidget::OnZoomChange(const QPoint& point, double zoomMultiplier)
     QSize s = size();
     static fixed_8_120_t one = 1;
 
-    // DebugPrint(L"OnZoomChange: Zoom level: %0.10lf\n", (double)m_zoom);
-    //fix y coords
+    // fix y coords
     fixed_8_120_t alpha = (double)(point.y()) / (s.height() - 1);
-    fixed_8_120_t quarter = (m_ymax - m_ymin) * (1.0 / (zoomMultiplier * 2.0));
-    fixed_8_120_t center = alpha * m_ymax + (one - alpha) * m_ymin;
-    // DebugPrint(L"OnZoomChange: Y calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
+    fixed_8_120_t quarter = (m_Ymax - m_Ymin) * (1.0 / (zoomMultiplier * 2.0));
+    fixed_8_120_t center = alpha * m_Ymax + (one - alpha) * m_Ymin;
 
-    m_ymin = center - quarter;
-    m_ymax = center + quarter;
+    m_Ymin = center - quarter;
+    m_Ymax = center + quarter;
 
-    //fix x coords
+    // fix x coords
     alpha = (double)(point.x()) / (s.width() - 1);
-    quarter = (m_xmax - m_xmin) * (1.0 / (zoomMultiplier * 2.0));
-    center = alpha * m_xmax + (one - alpha) * m_xmin;
-    m_xmin = center - quarter;
-    m_xmax = center + quarter;
+    quarter = (m_Xmax - m_Xmin) * (1.0 / (zoomMultiplier * 2.0));
+    center = alpha * m_Xmax + (one - alpha) * m_Xmin;
+    m_Xmin = center - quarter;
+    m_Xmax = center + quarter;
 
-    //DebugPrint(L"OnZoomChange: X calc: alpha=%0.10lf, quarter=%0.10lf, center=%0.10lf\n", (double)alpha, (double)quarter, (double)center);
-    //DebugPrint(L"OnZoomChange coords: \n\tX: {%0.10lf, %0.10lf} \n\tY: {%0.10lf, %0.10lf}\n", (double)m_xmin, (double)m_xmax, (double)m_ymin, (double)m_ymax);
     m_NeedToRecompute = true;
     update();
 }
 
 void QMandelbrotWidget::CreateColorTables()
 {
-    m_colorTable.clear();
-    m_colorTable.resize(m_MaxIter + 1);
+    m_ColorTable.clear();
+    m_ColorTable.resize(m_MaxIter + 1);
 
     if (m_PaletteType == palGrey) {
         for (int64_t i = 1; i <= m_MaxIter; ++i) {
             int c = 255 - (int)(215.0f * (float)i / (float)m_MaxIter);
-            m_colorTable[i] = qRgb(c, c, c);
+            m_ColorTable[i] = qRgb(c, c, c);
         }
     }
     else if (m_PaletteType == palVivid) {
@@ -121,22 +108,22 @@ void QMandelbrotWidget::CreateColorTables()
             float x = (1.0f - fabs(fmodf(h, 2) - 1.0f));
             switch ((int)floorf(h) % 6) {
             case 0: // 0-60 
-                m_colorTable[i] = qRgb(255, int(x * 255), 0);
+                m_ColorTable[i] = qRgb(255, int(x * 255), 0);
                 break;
             case 1: // 60-120
-                m_colorTable[i] = qRgb(int(x * 255), 255, 0);
+                m_ColorTable[i] = qRgb(int(x * 255), 255, 0);
                 break;
             case 2: // 120-180 
-                m_colorTable[i] = qRgb(0, 255, int(x * 255));
+                m_ColorTable[i] = qRgb(0, 255, int(x * 255));
                 break;
             case 3: // 180-240
-                m_colorTable[i] = qRgb(0, int(x * 255), 255);
+                m_ColorTable[i] = qRgb(0, int(x * 255), 255);
                 break;
             case 4: // 240-300
-                m_colorTable[i] = qRgb(int(x * 255), 0, 255);
+                m_ColorTable[i] = qRgb(int(x * 255), 0, 255);
                 break;
             case 5: // 300-360
-                m_colorTable[i] = qRgb(255, 0, int(x * 255));
+                m_ColorTable[i] = qRgb(255, 0, int(x * 255));
                 break;
             }
         }
@@ -150,12 +137,12 @@ void QMandelbrotWidget::CreateColorTables()
             r = (r + 3) & 0xFF;
             g = (g + 5) & 0xFF;
             b = (b - 3) & 0xFF;
-            m_colorTable[i] = qRgb(b, g, r);
+            m_ColorTable[i] = qRgb(b, g, r);
         }
     }
 
-    m_colorTable[0] = qRgb(255, 255, 255);
-    m_colorTable[m_MaxIter] = qRgb(0, 0, 0);
+    m_ColorTable[0] = qRgb(255, 255, 255);
+    m_ColorTable[m_MaxIter] = qRgb(0, 0, 0);
 }
 
 void QMandelbrotWidget::CreateColorTableFromHistogram(float offset)
@@ -204,25 +191,25 @@ void QMandelbrotWidget::CreateColorTableFromHistogram(float offset)
         int val = int(x * 255);
         switch (int(section) % 6) {
         case 0:
-            m_colorTable[i] = BGR_to_QRgb(val, 0, 255);
+            m_ColorTable[i] = qRgb(255, 0, val);
             break;
         case 1:
-            m_colorTable[i] = BGR_to_QRgb(255, 0, 255 - val);
+            m_ColorTable[i] = qRgb(255 - val, 0, 255);
             break;
         case 2:
-            m_colorTable[i] = BGR_to_QRgb(255, val, 0);
+            m_ColorTable[i] = qRgb(0, val, 255);
             break;
         case 3:
-            m_colorTable[i] = BGR_to_QRgb(255 - val, 255, 0);
+            m_ColorTable[i] = qRgb(0, 255, 255 - val);
             break;
         case 4:
-            m_colorTable[i] = BGR_to_QRgb(0, 255, val);
+            m_ColorTable[i] = qRgb(val, 255, 0);
             break;
         case 5:
-            m_colorTable[i] = BGR_to_QRgb(0, 255 - val, 255);
+            m_ColorTable[i] = qRgb(255, 255 - val, 0);
             break;
         default:
-            m_colorTable[i] = qRgb(255, 255, 255);
+            m_ColorTable[i] = qRgb(255, 255, 255);
         }
     }
 
@@ -280,15 +267,15 @@ void QMandelbrotWidget::CreateDibFromIterations(QImage& img, const float* pItera
             float mu_i, mu_f = modff(mu, &mu_i);
             unsigned int index = (unsigned int)mu_i;
             if (index < 0) { // unsigned cannot be <0, keep original logic
-                scanLine[k] = m_colorTable[0];
+                scanLine[k] = m_ColorTable[0];
                 continue;
             }
             if (index == (unsigned int)(m_MaxIter - 1)) {
-                scanLine[k] = m_colorTable[index];
+                scanLine[k] = m_ColorTable[index];
             }
             else {
-                QRgb c1 = m_colorTable[index];
-                QRgb c2 = m_colorTable[index + 1];
+                QRgb c1 = m_ColorTable[index];
+                QRgb c2 = m_ColorTable[index + 1];
                 unsigned int alpha = (unsigned int)(256.0 * mu_f);
                 if (alpha > 255) {
                     scanLine[k] = c2;
@@ -301,17 +288,20 @@ void QMandelbrotWidget::CreateDibFromIterations(QImage& img, const float* pItera
     }
 }
 
-void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h, double x0, double dx, double y0, double dy, double cr, double ci)
+void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h, double x0, double dx, double y0, double dy)
 {
     const float radius_sq = 2.0F * 2.0F;
     const float LOG2 = logf(2.0F);
+    bool isJulia = (m_SetType == stJulia);
+    const double cr = isJulia ? m_JuliaConstant.real() : 0.0;
+    const double ci = isJulia ? m_JuliaConstant.imag() : 0.0;
 
     double* xTable = new double[w];
-    for (int i = 0; i < w; ++i) xTable[i] = x0 + (double)i * dx;
+    for (int i = 0; i < w; ++i) {
+        xTable[i] = x0 + (double)i * dx;
+    }
 
-    bool isJulia = cr != 0.0 || ci != 0.0;
-
-#pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic)
     for (int l = 0; l < h; ++l) {
         double y = y0 + (dy * l);
         double usq = 0, vsq = 0, u = 0, v = 0;
@@ -339,8 +329,18 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
                 modulus = 0; 
             }
 
+            // complex iterative equation is:
+            // Z(i) = Z(i-1) ^ 2 + C
+            // Mandebrot: Z(0) = 0, C = (x,y)
+            // Julia:     Z(0) = (x,y), C = Constant
+            // 
+            // check uv vector amplitude is smaller than 2
+
             while (modulus < radius_sq && ++iter < m_MaxIter) {
+                // real
                 double tmp = usq - vsq + xc;
+                // imaginary
+                //v = 2.0 * (u * v) + y;
                 v = u * v + u * v + yc;
                 u = tmp;
                 vsq = v * v;
@@ -361,21 +361,24 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
 }
 
 void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
-    const fixed_8_120_t& y0, const fixed_8_120_t& dy, const fixed_8_120_t& cr, const fixed_8_120_t& ci)
+    const fixed_8_120_t& y0, const fixed_8_120_t& dy)
 {
     const fixed_8_120_t radius_sq = 2 * 2;
     const float LOG2 = logf(2.0F);
+    bool isJulia = (m_SetType == stJulia);
+    const fixed_8_120_t cr = isJulia ? m_JuliaConstant.real() : 0.0;
+    const fixed_8_120_t ci = isJulia ? m_JuliaConstant.imag() : 0.0;
 
     fixed_8_120_t* xTable = new fixed_8_120_t[width];
-    for (int i = 0; i < width; ++i) xTable[i] = x0 + dx * i;
+    for (int i = 0; i < width; ++i) {
+        xTable[i] = x0 + dx * i;
+    }
 
-    bool isJulia = cr || ci;
-
-#pragma omp parallel for schedule(dynamic)
+    #pragma omp parallel for schedule(dynamic)
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
         fixed_8_120_t usq, vsq, u, v, x, tmp, uv, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : fixed_8_120_t();
+        fixed_8_120_t xc = (isJulia) ? cr : fixed_8_120_t(0);
         fixed_8_120_t yc = (isJulia) ? ci : y;
 
         float* pbuff = pIterations + width * l;
@@ -383,15 +386,36 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
         for (int k = 0; k < width; ++k) {
             int iter = 0;
             x = xTable[k];
+            // Julia
             if (isJulia) {
-                u = x; v = y; usq = u * u; vsq = v * v; modulus = usq + vsq;
+                u = x; 
+                v = y;
+                usq = u * u;
+                vsq = v * v;
+                modulus = usq + vsq;
             }
+            // Mandelbrot
             else {
-                u = 0u; v = 0u; usq = 0u; vsq = 0u; xc = x; modulus = 0u;
+                u = 0u;
+                v = 0u;
+                usq = 0u;
+                vsq = 0u;
+                xc = x;
+                modulus = 0u;
             }
 
+            // complex iterative equation is:
+            // Z(i) = Z(i-1) ^ 2 + C
+            // Mandebrot: Z(0) = 0, C = (x,y)
+            // Julia:     Z(0) = (x,y), C = Constant
+            // 
+            // check uv vector amplitude is smaller than 2
+
             while (modulus < radius_sq && ++iter < m_MaxIter) {
+                // real
                 tmp = usq - vsq + xc;
+                // imaginary
+                //v = 2.0 * (u * v) + y;
                 v = ((u * v) << 1) + yc;
                 u = tmp;
                 usq = u * u;
@@ -417,9 +441,9 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
     QElapsedTimer _paintTimer; _paintTimer.start();
 
     QPainter p(this);
-    if (m_image.isNull() || m_image.size() != size()) {
-        m_image = QImage(size(), QImage::Format_RGB32);
-        m_image.fill(Qt::white);
+    if (m_ImageCache.isNull() || m_ImageCache.size() != size()) {
+        m_ImageCache = QImage(size(), QImage::Format_RGB32);
+        m_ImageCache.fill(Qt::white);
 
         delete[] m_Iterations;
         m_Iterations = new float[width() * height()];
@@ -440,19 +464,14 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
 
     if (m_NeedToRecompute) {
         SetAspectRatio();
-        fixed_8_120_t dx = (m_xmax - m_xmin) * (1.0 / w);
+        fixed_8_120_t dx = (m_Xmax - m_Xmin) * (1.0 / w);
         fixed_8_120_t dy = dx;
 
-        fixed_8_120_t cr = 0, ci = 0;
-        if (m_SetType == stJulia) {
-            cr = m_JuliaCr, ci = m_JuliaCi;
-        }
-
-        if (m_precision == Precision::Double || (m_precision == Precision::Auto && m_zoom <= (1ull<<44))) {
-            DrawImageDouble(m_Iterations, w, h, (double)m_xmin, (double)dx, (double)m_ymin, (double)dy, cr, ci);
+        if (m_Precision == Precision::Double || (m_Precision == Precision::Auto && m_ZoomLevel <= (1ull<<44))) {
+            DrawImageDouble(m_Iterations, w, h, (double)m_Xmin, (double)dx, (double)m_Ymin, (double)dy);
         }
         else {
-            DrawImageFixedPoint128(m_Iterations, w, h, m_xmin, dx, m_ymin, dy, cr, ci);
+            DrawImageFixedPoint128(m_Iterations, w, h, m_Xmin, dx, m_Ymin, dy);
         }
 
         if (m_PaletteType == palHistogram) {
@@ -463,14 +482,14 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
         m_NeedToRecompute = false;
     }
 
-    CreateDibFromIterations(m_image, m_Iterations, w, h);
-    p.drawImage(rect().topLeft(), m_image);
+    CreateDibFromIterations(m_ImageCache, m_Iterations, w, h);
+    p.drawImage(rect().topLeft(), m_ImageCache);
 
     // prepare and emit frame stats
     FrameStats stats;
     qint64 elapsed = _paintTimer.elapsed();
     stats.render_time_ms = static_cast<uint32_t>(elapsed > UINT32_MAX ? UINT32_MAX : elapsed);
-    stats.zoom = static_cast<float>(m_zoom);
+    stats.zoom = static_cast<float>(m_ZoomLevel);
     stats.size = size();
     stats.max_iterations = m_MaxIter;
     emit renderDone(stats);
@@ -490,7 +509,7 @@ void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
         if (event->modifiers() & Qt::ControlModifier) {
             zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 8.0 : 4.0;
         }
-        m_zoom *= zoomMultiplier;
+        m_ZoomLevel *= zoomMultiplier;
         OnZoomChange(event->pos(), zoomMultiplier);
     }
     else if (event->button() == Qt::RightButton) {
@@ -498,7 +517,7 @@ void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
         if (event->modifiers() & Qt::ControlModifier) {
             zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 0.125 : 0.25;
         }
-        m_zoom *= zoomMultiplier;
+        m_ZoomLevel *= zoomMultiplier;
         OnZoomChange(event->pos(), zoomMultiplier);
     }
     else if (event->button() == Qt::MiddleButton) {
@@ -510,7 +529,7 @@ int64_t QMandelbrotWidget::calcAutoIterationLimits()
 {
     // make iterations a function of zoom level. 
     // map 64 iterations to zoom=1 or smaller, and max_iterations to 2^113
-    double logZoom = max(log2(m_zoom), 0);
+    double logZoom = max(log2(m_ZoomLevel), 0);
     
     int64_t iters = static_cast<int64_t>(min_iterations + (logZoom / logMaxZoom) * (max_iterations - min_iterations));
     return iters;
@@ -529,8 +548,7 @@ void QMandelbrotWidget::saveImage(int width, int height)
 void QMandelbrotWidget::setJuliaConstant(const std::complex<double>& c)
 {
     SetDefaultValues();
-    m_JuliaCr = c.real();
-    m_JuliaCi = c.imag();
+    m_JuliaConstant = c;
     m_NeedToRecompute = true;
     update();
 }
@@ -541,8 +559,7 @@ void QMandelbrotWidget::setSetType(set_type_t type)
         return;
 
     m_SetType = type; 
-    m_NeedToRecompute = true; 
-    update();
+    resetView();
 }
 
 void QMandelbrotWidget::resetView()
@@ -552,10 +569,20 @@ void QMandelbrotWidget::resetView()
     update();
 }
 
+void QMandelbrotWidget::zoomIn()
+{
+    OnZoomChange(QPoint(width() / 2, height() / 2), m_ZoomIncrement);
+}
+
+void QMandelbrotWidget::zoomOut()
+{
+    OnZoomChange(QPoint(width() / 2, height() / 2), 1.0 / m_ZoomIncrement);
+}
+
 void QMandelbrotWidget::setAnimatePalette(bool animate)
 {
-    m_animate = animate;
-    if (m_animate) {
+    m_Animate = animate;
+    if (m_Animate) {
         // start timer
         m_Timer.setInterval(70ms);
         m_Timer.start();
@@ -577,30 +604,48 @@ void QMandelbrotWidget::setAnimatePalette(bool animate)
 
 void QMandelbrotWidget::setPrecision(Precision p)
 {
-    m_precision = p;
+    m_Precision = p;
     m_NeedToRecompute = true;
     update();
 }
 
 void QMandelbrotWidget::animationTick()
 {
-    // roll the m_colorTable values
+    // roll the m_ColorTable values
 
     if (m_PaletteType == palHistogram) {
         m_HsvOffset += 1.0f / 30;
         CreateColorTableFromHistogram(m_HsvOffset);
     }
     else {
-        QVector<QRgb> temp = m_colorTable;
-        temp[0] = m_colorTable[0];
+        QVector<QRgb> temp = m_ColorTable;
+        temp[0] = m_ColorTable[0];
         for (int i = 1; i < m_MaxIter; ++i) {
-            temp[i] = m_colorTable[i + 1];
+            temp[i] = m_ColorTable[i + 1];
         }
-        temp[m_MaxIter] = m_colorTable[1];
+        temp[m_MaxIter] = m_ColorTable[1];
 
-        m_colorTable = std::move(temp);
+        m_ColorTable = std::move(temp);
     }
     repaint();
+}
+
+void QMandelbrotWidget::panHorizontal(double amount)
+{
+    auto dx = (m_Xmax - m_Xmin) * amount;
+    m_Xmin += dx;
+    m_Xmax += dx;
+    m_NeedToRecompute = true;
+    update();
+}
+
+void QMandelbrotWidget::panVertical(double amount)
+{
+    auto dy = (m_Ymax - m_Ymin) * amount;
+    m_Ymin += dy;
+    m_Ymax += dy;
+    m_NeedToRecompute = true;
+    update();
 }
 
 void QMandelbrotWidget::setMaximumIterations(int64_t maxIter)
