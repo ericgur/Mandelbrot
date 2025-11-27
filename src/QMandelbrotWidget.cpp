@@ -377,7 +377,7 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
     #pragma omp parallel for schedule(dynamic)
     for (int l = 0; l < height; ++l) {
         fixed_8_120_t y = y0 + (dy * l);
-        fixed_8_120_t usq, vsq, u, v, x, tmp, uv, modulus;
+        fixed_8_120_t usq, vsq, u, v, x, tmp, modulus;
         fixed_8_120_t xc = (isJulia) ? cr : fixed_8_120_t(0);
         fixed_8_120_t yc = (isJulia) ? ci : y;
 

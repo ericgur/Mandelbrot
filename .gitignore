@@ -6,3 +6,5 @@
 *.user
 *.aps
 bak/
+build/
+bin/

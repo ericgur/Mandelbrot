@@ -1,7 +1,7 @@
 /***********************************************************************************
     MIT License
 
-    Copyright (c) 2023 Eric Gur (ericgur@iname.com)
+    Copyright (c) 2025 Eric Gur (ericgur@iname.com)
 
     Permission is hereby granted, free of charge, to any person obtaining a copy
     of this software and associated documentation files (the "Software"), to deal
@@ -31,6 +31,7 @@
 #include <cassert>
 #include <stdexcept>
 #include <type_traits>
+#include <memory>
 
 /***********************************************************************************
 *                                  Build Options
@@ -43,22 +44,37 @@
 #if FP128_DISABLE_INLINE != FALSE
 #define FP128_INLINE __declspec(noinline)
 #else
-#define FP128_INLINE __forceinline
+#define FP128_INLINE inline
 #endif
 
-// Set to TRUE to disable function inlining - useful for profiling a specific function
-#ifndef UINT128_T_DISABLE_INLINE
-#define UINT128_T_DISABLE_INLINE FALSE
-#endif 
-
-#if UINT128_T_DISABLE_INLINE != FALSE
-#define UINT128_T_INLINE __declspec(noinline)
-#else
-#define UINT128_T_INLINE __forceinline
-#endif
 
 static constexpr bool FP128_CPP_STYLE_MODULO = true; // set to false to test python style modulo
 static constexpr bool FP128_USE_RECIPROCAL_FOR_DIVISION = true;
+
+// clang/Apple implementations
+#if defined (__GNUC__) || defined(__clang__)
+#define __lzcnt __lzcnt32
+FP128_INLINE constexpr uint32_t _udiv64(uint32_t dividend, uint32_t divisor, uint32_t* remainder)
+{
+    uint32_t quot = dividend / divisor;
+    if (remainder) {
+        *remainder = dividend % divisor;
+    }
+    return quot;
+}
+
+FP128_INLINE constexpr uint64_t _udiv128(uint64_t hi_dividend, uint64_t lo_dividend, uint64_t divisor, uint64_t* remainder)
+{
+    // simple implementation for non-MSVC compilers
+    __uint128_t dividend = (static_cast<__uint128_t>(hi_dividend) << 64) | lo_dividend;
+    uint64_t quot = static_cast<uint64_t>(dividend / divisor);
+    if (remainder) {
+        *remainder = static_cast<uint64_t>(dividend % divisor);
+    }
+    return quot;
+
+}
+#endif //#if defined (__GNUC__) || defined(__clang__)
 
 /***********************************************************************************
 *                                  Macros
@@ -87,6 +103,7 @@ static constexpr bool FP128_USE_RECIPROCAL_FOR_DIVISION = true;
 #define FP128_THROW_ONLY_IN_DEBUG noexcept
 #endif // _DEBUG
 
+
 namespace fp128 {
 
 /***********************************************************************************
@@ -101,8 +118,11 @@ static constexpr int32_t dbl_exp_bits = 11;   // exponent bit count of a double 
 /***********************************************************************************
 *                                  Containers
 ************************************************************************************/
+#if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable: 4201) // nameless union/structs
+#endif
+
 struct Double {
     Double(double v = 0) noexcept: val(v) {}
     union {
@@ -128,7 +148,10 @@ struct Float {
 static_assert(sizeof(Double) == sizeof(double), "The Double union should have the same size as a double variable!");
 static_assert(sizeof(Float) == sizeof(float), "The Float union should have the same size as a float variable!");
 
+#if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
+
 /***********************************************************************************
 *                                  Functions
 ************************************************************************************/
@@ -154,7 +177,7 @@ constexpr uint32_t array_length(const T& a) {
     * @param shift how many bits to shift
     * @return result of 'x' the combined 64 bit element right shifted by 'shift' bits.
 */
-__forceinline uint32_t shift_right64(uint32_t l, uint32_t h, int shift) noexcept
+FP128_INLINE uint32_t shift_right64(uint32_t l, uint32_t h, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 32);
     return (shift > 0) ? (l >> shift) | (h << (32 - shift)) : l;
@@ -166,7 +189,7 @@ __forceinline uint32_t shift_right64(uint32_t l, uint32_t h, int shift) noexcept
     * @param shift how many bits to shift
     * @return result of the combined 64 bit element left shifted by 'shift' bits.
 */
-__forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift) noexcept
+FP128_INLINE uint32_t shift_left64(uint32_t l, uint32_t h, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 32);
     return (shift > 0) ?  (h << shift) | (l >> (32 - shift)) : h;
@@ -178,21 +201,22 @@ __forceinline uint32_t shift_left64(uint32_t l, uint32_t h, int shift) noexcept
     * @param shift how many bits to shift
     * @return result of 'x' right shifted by 'shift' bits.
 */
-__forceinline uint64_t shift_right64_round(uint64_t x, int shift) noexcept
+FP128_INLINE uint64_t shift_right64_round(uint64_t x, int shift) noexcept
 {
     assert(shift > 0 && shift < 64);
     x += 1ull << (shift - 1);
     return x >> shift;
 }
+
 /**
-    * @brief Right shift a 128 bit integer (inplace). 
+    * @brief Right shift a 128 bit unsigned integer (inplace).
     * Limited range, inplace and no paramter checks.
     * @param l Low QWORD
     * @param h High QWORD
     * @param shift Bits to shift, between 1-63
     * @return void
 */
-__forceinline void shift_right128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
+FP128_INLINE void shift_right128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
 {
     assert(shift > 0 && shift < 64);
     l = (l >> shift) | (h << (64 - shift));
@@ -206,7 +230,7 @@ __forceinline void shift_right128_inplace(uint64_t& l, uint64_t& h, int shift) n
     * @param shift Bits to shift, between 1-63
     * @return void
 */
-__forceinline void shift_left128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
+FP128_INLINE void shift_left128_inplace(uint64_t& l, uint64_t& h, int shift) noexcept
 {
     assert(shift > 0 && shift < 64);
     h = (h << shift) | (l >> (64 - shift));
@@ -220,7 +244,7 @@ __forceinline void shift_left128_inplace(uint64_t& l, uint64_t& h, int shift) no
     * @param shift Bits to shift, between 1-inf
     * @return void
 */
-__forceinline void shift_right128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
+FP128_INLINE void shift_right128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
 {
     assert(shift >= 0);
     if (shift == 0) return;
@@ -259,7 +283,7 @@ __forceinline void shift_right128_inplace_safe(uint64_t& l, uint64_t& h, int shi
     * @param shift Bits to shift, between 1-inf
     * @return void
 */
-__forceinline void shift_left128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
+FP128_INLINE void shift_left128_inplace_safe(uint64_t& l, uint64_t& h, int shift) noexcept
 {
     assert(shift >= 0);
     if (shift == 0) return;
@@ -286,7 +310,7 @@ __forceinline void shift_left128_inplace_safe(uint64_t& l, uint64_t& h, int shif
     * @param shift Bits to shift, between 0-127
     * @return Lower 64 bit of the result
 */
-__forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
+FP128_INLINE uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
 {
     assert(shift >= 0 && shift < 128);
     if (shift == 0) return l;
@@ -301,7 +325,7 @@ __forceinline uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcep
     * @param shift Bits to shift, between 0-127
     * @return Lower 64 bit of the result
 */
-__forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) noexcept
+FP128_INLINE uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) noexcept
 {
     assert(shift >= 0 && shift < 128);
     if (shift == 0) return l;
@@ -338,7 +362,7 @@ __forceinline uint64_t shift_right128_round(uint64_t l, uint64_t h, int shift) n
     * @param shift Bits to shift, between 0-127
     * @return Upper 64 bit of the result
 */
-__forceinline uint64_t shift_left128(uint64_t l, uint64_t h, int shift) noexcept
+FP128_INLINE uint64_t shift_left128(uint64_t l, uint64_t h, int shift) noexcept
 {
     assert(shift >= 0 && shift < 128);
     if (shift == 0) return h;
@@ -352,7 +376,7 @@ __forceinline uint64_t shift_left128(uint64_t l, uint64_t h, int shift) noexcept
     * @param h High QWORD (ref)
     * @return void
 */
-__forceinline void twos_complement128(uint64_t& l, uint64_t& h) noexcept
+FP128_INLINE void twos_complement128(uint64_t& l, uint64_t& h) noexcept
 {
     l = ~l + 1ull;
     h = ~h + (l == 0);
@@ -407,6 +431,7 @@ inline static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const u
     int32_t i, j;                                 // Indexes
     // disable various warnings, some are bogus in VS2022.
     // the below code relies on the implied truncation (to 32 bit) of several expressions.
+#if defined(_MSC_VER)
 #pragma warning(push)
 #pragma warning(disable: 6255)
 #pragma warning(disable: 4244)
@@ -416,6 +441,7 @@ inline static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const u
 #pragma warning(disable: 26451)
 #pragma warning(disable: 26493)
 #pragma warning(disable: 26438)
+#endif
 
     // shrink the arrays to avoid extra work on small numbers
     while (m > 0 && u[m - 1] == 0) --m;
@@ -492,7 +518,10 @@ inline static int div_32bit(uint32_t* q, uint32_t* r, const uint32_t* u, const u
         r[n - 1] = un[n - 1] >> s;
     }
     return 0;
+#if defined(_MSC_VER)
 #pragma warning(pop)
+#endif
+
 }
 /**
     * @brief 64 bit words unsigned divide function. Variation of the code from the book Hacker's Delight.
@@ -545,7 +574,7 @@ FP128_INLINE static int32_t div_64bit(uint64_t* q, uint64_t* r, const uint64_t* 
  * @param x input value.
  * @return Number of 1 bits in x.
 */
-__forceinline uint64_t popcnt128(uint64_t l, uint64_t h) noexcept
+FP128_INLINE uint64_t popcnt128(uint64_t l, uint64_t h) noexcept
 {
     return __popcnt64(l) + __popcnt64(h);
 }
@@ -555,7 +584,7 @@ __forceinline uint64_t popcnt128(uint64_t l, uint64_t h) noexcept
  * @param h High QWORD
  * @return Left zero count
 */
-__forceinline uint64_t lzcnt128(uint64_t l, uint64_t h) noexcept
+FP128_INLINE uint64_t lzcnt128(uint64_t l, uint64_t h) noexcept
 {
     return (h != 0) ? __lzcnt64(h) : 64 + __lzcnt64(l);
 }
@@ -566,7 +595,7 @@ __forceinline uint64_t lzcnt128(uint64_t l, uint64_t h) noexcept
  * @param h Jigh QWORD of the value
  * @return log2(x). Returns zero when x is zero.
 */
-__forceinline uint64_t log2(uint64_t l, uint64_t h) noexcept
+FP128_INLINE uint64_t log2(uint64_t l, uint64_t h) noexcept
 {
     return (h != 0 || l != 0) ? 127 - lzcnt128(l, h) : 0;
 }
@@ -576,7 +605,7 @@ __forceinline uint64_t log2(uint64_t l, uint64_t h) noexcept
  * @param x The number to perform log2 on.
  * @return log2(x). Returns zero when x is zero.
 */
-__forceinline uint64_t log2(uint64_t x) noexcept
+FP128_INLINE uint64_t log2(uint64_t x) noexcept
 {
     return (x) ? 63ull - __lzcnt64(x) : 0;
 }
@@ -586,7 +615,7 @@ __forceinline uint64_t log2(uint64_t x) noexcept
  * @param x The number to perform log2 on.
  * @return log2(x). Returns zero when x is zero.
 */
-__forceinline uint32_t log2(uint32_t x) noexcept
+FP128_INLINE uint32_t log2(uint32_t x) noexcept
 {
     return (x) ? 31ull - __lzcnt(x) : 0;
 }

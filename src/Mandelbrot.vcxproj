@@ -92,9 +92,6 @@
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
-    <Text Include="CMakeLists.txt" />
-  </ItemGroup>
-  <ItemGroup>
     <QtUic Include="QJuliaSetOptions.ui" />
     <QtUic Include="QtMainWindow.ui" />
   </ItemGroup>
