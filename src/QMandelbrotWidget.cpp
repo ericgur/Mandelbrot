@@ -60,8 +60,8 @@ void QMandelbrotWidget::SetAspectRatio()
     if (0 == s.height())
         return;
 
-    fixed_8_120_t ratio = (double)s.height() / s.width();
-    fixed_8_120_t ysize = (m_Xmax - m_Xmin) * (ratio >> 1);
+    fp128_t ratio = (double)s.height() / s.width();
+    fp128_t ysize = (m_Xmax - m_Xmin) * (ratio >> 1);
     m_Ymin = ((m_Ymax + m_Ymin) >> 1) - ysize;
     m_Ymax = m_Ymin + (ysize << 1);
 }
@@ -69,12 +69,12 @@ void QMandelbrotWidget::SetAspectRatio()
 void QMandelbrotWidget::OnZoomChange(const QPoint& point, double zoomMultiplier)
 {
     QSize s = size();
-    static fixed_8_120_t one = 1;
+    static fp128_t one = 1;
 
     // fix y coords
-    fixed_8_120_t alpha = (double)(point.y()) / (s.height() - 1);
-    fixed_8_120_t quarter = (m_Ymax - m_Ymin) * (1.0 / (zoomMultiplier * 2.0));
-    fixed_8_120_t center = alpha * m_Ymax + (one - alpha) * m_Ymin;
+    fp128_t alpha = (double)(point.y()) / (s.height() - 1);
+    fp128_t quarter = (m_Ymax - m_Ymin) * (1.0 / (zoomMultiplier * 2.0));
+    fp128_t center = alpha * m_Ymax + (one - alpha) * m_Ymin;
 
     m_Ymin = center - quarter;
     m_Ymax = center + quarter;
@@ -308,8 +308,8 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
         double xc = (isJulia) ? cr : 0;
         double yc = (isJulia) ? ci : y;
         double modulus = 0;
-
         float* pbuff = pIterations + w * l;
+
         for (int k = 0; k < w; ++k) {
             int iter = 0;
             double x = xTable[k];
@@ -329,18 +329,22 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
                 modulus = 0; 
             }
 
-            // complex iterative equation is:
-            // Z(i) = Z(i-1) ^ 2 + C
-            // Mandebrot: Z(0) = 0, C = (x,y)
-            // Julia:     Z(0) = (x,y), C = Constant
-            // 
-            // check uv vector amplitude is smaller than 2
+            /*
+                Complex iterative equation Z is:
+                Mandebrot: Z(0) = 0, C = (x,y)
+                Julia:     Z(0) = (x,y), C = Constant
 
+                Shared:
+                             2
+                Z(i) = Z(i-1) + C
+
+                check uv vector amplitude is smaller than 2
+            */
             while (modulus < radius_sq && ++iter < m_MaxIter) {
                 // real
                 double tmp = usq - vsq + xc;
-                // imaginary
-                //v = 2.0 * (u * v) + y;
+                // imaginary:
+                // v = 2.0 * (u * v) + y;
                 v = u * v + u * v + yc;
                 u = tmp;
                 vsq = v * v;
@@ -360,27 +364,25 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
     delete[] xTable;
 }
 
-void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx,
-    const fixed_8_120_t& y0, const fixed_8_120_t& dy)
+void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
 {
-    const fixed_8_120_t radius_sq = 2 * 2;
+    const fp128_t radius_sq = 2 * 2;
     const float LOG2 = logf(2.0F);
     bool isJulia = (m_SetType == stJulia);
-    const fixed_8_120_t cr = isJulia ? m_JuliaConstant.real() : 0.0;
-    const fixed_8_120_t ci = isJulia ? m_JuliaConstant.imag() : 0.0;
+    const fp128_t cr = isJulia ? m_JuliaConstant.real() : 0.0;
+    const fp128_t ci = isJulia ? m_JuliaConstant.imag() : 0.0;
 
-    fixed_8_120_t* xTable = new fixed_8_120_t[width];
+    fp128_t* xTable = new fp128_t[width];
     for (int i = 0; i < width; ++i) {
         xTable[i] = x0 + dx * i;
     }
 
     #pragma omp parallel for schedule(dynamic)
     for (int l = 0; l < height; ++l) {
-        fixed_8_120_t y = y0 + (dy * l);
-        fixed_8_120_t usq, vsq, u, v, x, tmp, modulus;
-        fixed_8_120_t xc = (isJulia) ? cr : fixed_8_120_t(0);
-        fixed_8_120_t yc = (isJulia) ? ci : y;
-
+        fp128_t y = y0 + (dy * l);
+        fp128_t usq, vsq, u, v, x, tmp, modulus;
+        fp128_t xc = (isJulia) ? cr : fp128_t(0);
+        fp128_t yc = (isJulia) ? ci : y;
         float* pbuff = pIterations + width * l;
 
         for (int k = 0; k < width; ++k) {
@@ -404,18 +406,22 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
                 modulus = 0u;
             }
 
-            // complex iterative equation is:
-            // Z(i) = Z(i-1) ^ 2 + C
-            // Mandebrot: Z(0) = 0, C = (x,y)
-            // Julia:     Z(0) = (x,y), C = Constant
-            // 
-            // check uv vector amplitude is smaller than 2
-
+            /*
+                Complex iterative equation Z is:
+                Mandebrot: Z(0) = 0, C = (x,y)
+                Julia:     Z(0) = (x,y), C = Constant
+               
+                Shared:
+                             2
+                Z(i) = Z(i-1) + C
+               
+                check uv vector amplitude is smaller than 2
+            */
             while (modulus < radius_sq && ++iter < m_MaxIter) {
-                // real
+                // real:
                 tmp = usq - vsq + xc;
-                // imaginary
-                //v = 2.0 * (u * v) + y;
+                // imaginary:
+                // v = 2.0 * (u * v) + y;
                 v = ((u * v) << 1) + yc;
                 u = tmp;
                 usq = u * u;
@@ -464,8 +470,8 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
 
     if (m_NeedToRecompute) {
         SetAspectRatio();
-        fixed_8_120_t dx = (m_Xmax - m_Xmin) * (1.0 / w);
-        fixed_8_120_t dy = dx;
+        fp128_t dx = (m_Xmax - m_Xmin) * (1.0 / w);
+        fp128_t dy = dx;
 
         if (m_Precision == Precision::Double || (m_Precision == Precision::Auto && m_ZoomLevel <= (1ull<<44))) {
             DrawImageDouble(m_Iterations, w, h, (double)m_Xmin, (double)dx, (double)m_Ymin, (double)dy);

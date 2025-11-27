@@ -8,12 +8,12 @@
 #include "fixed_point128.h"
 using namespace fp128;
 
-typedef fixed_point128<8> fixed_8_120_t;
+typedef fixed_point128<8> fp128_t;
 struct FrameStats {
-    uint32_t render_time_ms;
-    float zoom;
-    QSize size;
-    int32_t max_iterations;
+    uint32_t render_time_ms{};
+    float zoom{};
+    QSize size{};
+    int32_t max_iterations{};
 };
 
 class QMandelbrotWidget : public QWidget
@@ -58,7 +58,7 @@ private:
     int64_t calcAutoIterationLimits();
 
     // View state (ported from CMandelbrotView)
-    fixed_8_120_t m_Xmin, m_Xmax, m_Ymin, m_Ymax;
+    fp128_t m_Xmin, m_Xmax, m_Ymin, m_Ymax;
     double m_ZoomLevel;
     double m_ZoomIncrement = 2.0;
     int64_t m_MaxIter = 128;
@@ -98,6 +98,5 @@ private:
     void CreateHistogram(const float* pIterations, int64_t width, int64_t height);
     void CreateDibFromIterations(QImage& img, const float* pIterations, int64_t width, int64_t height);
     void DrawImageDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy);
-    void DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, const fixed_8_120_t& x0, const fixed_8_120_t& dx, const fixed_8_120_t& y0,
-                       const fixed_8_120_t& dy);
+    void DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
 };
