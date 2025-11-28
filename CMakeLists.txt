@@ -11,7 +11,7 @@ set(CMAKE_EXPORT_COMPILE_COMMANDS ON)
 set(CMAKE_PCH_INSTANTIATE_TEMPLATES ON)
 
 # MacOS specific settings
-set(CMAKE_OSX_DEPLOYMENT_TARGET 15.0)
+set(CMAKE_OSX_DEPLOYMENT_TARGET 26.0)
 
 find_package(OpenMP REQUIRED)
 
@@ -39,7 +39,7 @@ if (APPLE)
     set(CMAKE_MACOSX_BUNDLE FALSE)
 
     # Distribution directory where all binaries and shared libs will be collected
-    set(DIST_DIR "${CMAKE_BINARY_DIR}/dist")
+    set(DIST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
     file(MAKE_DIRECTORY "${DIST_DIR}")
 
     # Keep FRAMEWORK_DIR variable for compatibility, point at DIST_DIR
