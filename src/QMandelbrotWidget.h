@@ -21,7 +21,7 @@ class QMandelbrotWidget : public QWidget
     Q_OBJECT
     Q_DISABLE_COPY_MOVE(QMandelbrotWidget)
 public:
-    static inline constexpr int64_t max_iterations = 4096;
+    static inline constexpr int64_t max_iterations = 2500;
     static inline constexpr int64_t min_iterations = 128;
     static inline constexpr double logMaxZoom = 113.0; // max of fixed point 128 bit
     enum class Precision { Auto, Double, FixedPoint128 };
