@@ -22,8 +22,12 @@
     SOFTWARE.
 ************************************************************************************/
 
-// pch.cpp: source file corresponding to the pre-compiled header
+/**
+ * @file pch.cpp
+ * @brief Source file for precompiled header generation.
+ *
+ * Required by MSVC to trigger precompiled header compilation.
+ * This file should only include pch.h.
+ */
 
 #include "pch.h"
-
-// When you are using pre-compiled headers, this source file is necessary for compilation to succeed.

@@ -38,9 +38,6 @@
     <ClInclude Include="fixed_point128_shared.h">
       <Filter>Header Files</Filter>
     </ClInclude>
-    <ClInclude Include="resource.h">
-      <Filter>Header Files</Filter>
-    </ClInclude>
   </ItemGroup>
   <ItemGroup>
     <ClCompile Include="pch.cpp">
@@ -55,15 +52,16 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="QJuliaSetOptions.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
+    <None Include="CLAUDE.md" />
   </ItemGroup>
   <ItemGroup>
     <Natvis Include="fixed_point128.natvis" />
-  </ItemGroup>
-  <ItemGroup>
-    <Text Include="CMakeLists.txt" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="QMandelbrotWidget.h">
@@ -72,9 +70,15 @@
     <QtMoc Include="QtMainWindow.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="QJuliaSetOptions.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="QtMainWindow.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="QJuliaSetOptions.ui">
       <Filter>Form Files</Filter>
     </QtUic>
   </ItemGroup>

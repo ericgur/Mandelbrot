@@ -74,7 +74,6 @@
     <ClInclude Include="fixed_point128_shared.h" />
     <ClInclude Include="pch.h" />
     <QtMoc Include="QJuliaSetOptions.h" />
-    <ClInclude Include="resource.h" />
     <QtMoc Include="QMandelbrotWidget.h" />
     <QtMoc Include="QtMainWindow.h" />
   </ItemGroup>
@@ -89,6 +88,10 @@
     <ClCompile Include="QtMainWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
+    <None Include="CLAUDE.md">
+      <SubType>
+      </SubType>
+    </None>
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
