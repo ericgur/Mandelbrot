@@ -29,6 +29,16 @@ target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${Qt6Gui
 
 install(TARGETS ${TARGET} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
+# Windows: deploy Qt DLLs alongside the executable during cmake --install
+if(WIN32)
+    qt_generate_deploy_app_script(
+        TARGET ${TARGET}
+        OUTPUT_SCRIPT deploy_script
+        NO_UNSUPPORTED_PLATFORM_ERROR
+    )
+    install(SCRIPT ${deploy_script})
+endif()
+
 # If on macOS set output directories and rpaths so everything is collected in ${DIST_DIR}
 if(APPLE)
     # set output directories so all build artifacts go to the same folder

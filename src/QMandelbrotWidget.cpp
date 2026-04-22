@@ -151,7 +151,7 @@ void QMandelbrotWidget::CreateColorTables()
             m_ColorTable[i] = qRgb(c, c, c);
         }
     } else if (m_PaletteType == palVivid) {
-        float step = (m_MaxIter <= 256) ? (13.0f / 256.f) : (13.0f / 256.f);
+        float step = 13.0f / 256.f;
         for (int i = 0; i <= m_MaxIter; ++i) {
             float h = step * i;
             float x = (1.0f - fabs(fmodf(h, 2) - 1.0f));
@@ -185,7 +185,7 @@ void QMandelbrotWidget::CreateColorTables()
             r = (r + 3) & 0xFF;
             g = (g + 5) & 0xFF;
             b = (b - 3) & 0xFF;
-            m_ColorTable[i] = qRgb(b, g, r);
+            m_ColorTable[i] = qRgb(r, g, b);
         }
     }
 
@@ -230,10 +230,16 @@ void QMandelbrotWidget::CreateColorTableFromHistogram(float offset)
         hue += d;
     }
 
-    double err = (1.0f - hue) / (item_count ? item_count : 1);
+    // Distribute the remaining hue budget (1.0 - hue) evenly across populated entries.
+    // Each populated entry gets a cumulative correction of n*err, where n is its
+    // ordinal among populated entries, so the final populated entry lands at ~1.0.
+    double err = (1.0 - hue) / (item_count ? item_count : 1);
+    int n = 0;
     for (int i = 0; i < m_MaxIter; ++i) {
-        if (hues[i] >= 0)
-            hues[i] += err * i;
+        if (hues[i] >= 0) {
+            ++n;
+            hues[i] += err * n;
+        }
     }
 
     // create HSV to QRgb table
@@ -347,11 +353,11 @@ void QMandelbrotWidget::CreateDibFromIterations(QImage& img, const float* pItera
                 continue;
             }
             float mu_i, mu_f = modff(mu, &mu_i);
-            unsigned int index = (unsigned int)mu_i;
-            if (index < 0) {  // unsigned cannot be <0, keep original logic
+            if (mu_i < 0.0f) {
                 scanLine[k] = m_ColorTable[0];
                 continue;
             }
+            unsigned int index = (unsigned int)mu_i;
             if (index == (unsigned int)(m_MaxIter - 1)) {
                 scanLine[k] = m_ColorTable[index];
             } else {
@@ -390,7 +396,7 @@ void QMandelbrotWidget::CreateDibFromIterations(QImage& img, const float* pItera
 void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h, double x0, double dx, double y0, double dy)
 {
     const float radius_sq = 2.0F * 2.0F;
-    const float LOG2 = logf(2.0F);
+    const float INV_LOG2 = 1.f / logf(2.0F);
     bool isJulia = (m_SetType == stJulia);
     const double cr = isJulia ? m_JuliaConstant.real() : 0.0;
     const double ci = isJulia ? m_JuliaConstant.imag() : 0.0;
@@ -438,7 +444,9 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
 
                 check uv vector amplitude is smaller than 2
             */
-            while (modulus < radius_sq && ++iter < m_MaxIter) {
+            while (iter < m_MaxIter && modulus < radius_sq) {
+                ++iter;
+
                 // real
                 double tmp = usq - vsq + xc;
                 // imaginary:
@@ -450,7 +458,7 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
                 modulus = vsq + usq;
             }
             if (m_SmoothLevel && iter < m_MaxIter && iter > 0) {
-                float mu = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
+                float mu = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) * INV_LOG2;
                 *pbuff++ = max(mu, 1.0f);
             } else {
                 *pbuff++ = (float)max(iter, 1);
@@ -480,7 +488,7 @@ void QMandelbrotWidget::DrawImageDouble(float* pIterations, int64_t w, int64_t h
 void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
 {
     const fp128_t radius_sq = 2 * 2;
-    const float LOG2 = logf(2.0F);
+    const float INV_LOG2 = 1.f / logf(2.0F);
     bool isJulia = (m_SetType == stJulia);
     const fp128_t cr = isJulia ? m_JuliaConstant.real() : 0.0;
     const fp128_t ci = isJulia ? m_JuliaConstant.imag() : 0.0;
@@ -530,7 +538,9 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
 
                 check uv vector amplitude is smaller than 2
             */
-            while (modulus < radius_sq && ++iter < m_MaxIter) {
+            while (iter < m_MaxIter && modulus < radius_sq) {
+                ++iter;
+
                 // real:
                 tmp = usq - vsq + xc;
                 // imaginary:
@@ -543,7 +553,8 @@ void QMandelbrotWidget::DrawImageFixedPoint128(float* pIterations, int64_t width
             }
 
             if (m_SmoothLevel && iter < m_MaxIter && iter > 1) {
-                *pbuff++ = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) / LOG2;
+                float mu = (float)(iter + 1) - (logf(logf(sqrtf((float)modulus)))) * INV_LOG2;
+                *pbuff++ = max(mu, 1.0f);
             } else {
                 *pbuff++ = (float)max(iter, 1);
             }
@@ -672,7 +683,7 @@ int64_t QMandelbrotWidget::calcAutoIterationLimits()
 {
     // make iterations a function of zoom level.
     // map 64 iterations to zoom=1 or smaller, and max_iterations to 2^113
-    double logZoom = max(log2(m_ZoomLevel), 0);
+    double logZoom = max(log2(m_ZoomLevel), 0.0);
 
     int64_t iters = static_cast<int64_t>(min_iterations + (logZoom / logMaxZoom) * (max_iterations - min_iterations));
     return iters;
@@ -681,20 +692,59 @@ int64_t QMandelbrotWidget::calcAutoIterationLimits()
 /**
  * @brief Export the current view as a PNG file.
  *
- * Opens a file dialog for the user to choose the save location,
- * then renders and saves the image at the specified resolution.
+ * Opens a file dialog for the user to choose the save location, then renders
+ * the fractal at the requested resolution and writes it to disk. The X bounds
+ * of the current view are preserved; Y bounds are recomputed to match the
+ * target aspect ratio about the current Y center so the render is consistent
+ * with what is displayed. The active palette (including histogram mode) is
+ * honored.
  *
  * @param width Image width in pixels.
  * @param height Image height in pixels.
  */
 void QMandelbrotWidget::saveImage(int width, int height)
 {
-    QImage img(width, height, QImage::Format_ARGB32);
-    img.fill(Qt::white);
+    if (width <= 0 || height <= 0)
+        return;
+
     QString fn = QFileDialog::getSaveFileName(this, tr("Save Image"), QString(), tr("PNG Files (*.png)"));
     if (fn.isEmpty())
         return;
+
+    // Recompute Y bounds for the target aspect ratio around the current Y center.
+    fp128_t ratio = (double)height / (double)width;
+    fp128_t ysize = (m_Xmax - m_Xmin) * (ratio >> 1);
+    fp128_t yCenter = (m_Ymax + m_Ymin) >> 1;
+    fp128_t yMin = yCenter - ysize;
+
+    fp128_t dx = (m_Xmax - m_Xmin) * (1.0 / width);
+    fp128_t dy = dx;
+
+    float* iterations = new float[(size_t)width * (size_t)height];
+
+    if (m_Precision == Precision::Double || (m_Precision == Precision::Auto && m_ZoomLevel <= (1ull << 44))) {
+        DrawImageDouble(iterations, width, height, (double)m_Xmin, (double)dx, (double)yMin, (double)dy);
+    } else {
+        DrawImageFixedPoint128(iterations, width, height, m_Xmin, dx, yMin, dy);
+    }
+
+    if (m_PaletteType == palHistogram) {
+        CreateHistogram(iterations, width, height);
+        CreateColorTableFromHistogram(m_HsvOffset);
+    }
+
+    QImage img(width, height, QImage::Format_RGB32);
+    CreateDibFromIterations(img, iterations, width, height);
     img.save(fn, "PNG");
+
+    delete[] iterations;
+
+    // Histogram palette and color table were rebuilt against the export-resolution
+    // iterations; trigger a recompute so the on-screen view is refreshed.
+    if (m_PaletteType == palHistogram) {
+        m_NeedToRecompute = true;
+        update();
+    }
 }
 
 void QMandelbrotWidget::setJuliaConstant(const std::complex<double>& c)
@@ -723,13 +773,13 @@ void QMandelbrotWidget::resetView()
 
 void QMandelbrotWidget::zoomIn()
 {
-    m_ZoomLevel *= 2.0;
+    m_ZoomLevel *= m_ZoomIncrement;
     OnZoomChange(QPoint(width() / 2, height() / 2), m_ZoomIncrement);
 }
 
 void QMandelbrotWidget::zoomOut()
 {
-    m_ZoomLevel /= 2.0;
+    m_ZoomLevel /= m_ZoomIncrement;
     OnZoomChange(QPoint(width() / 2, height() / 2), 1.0 / m_ZoomIncrement);
 }
 

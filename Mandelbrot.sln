@@ -8,6 +8,9 @@ EndProject
 Project("{2150E333-8FDC-42A3-9474-1A3956D46DE8}") = "Solution Items", "Solution Items", "{65B92486-1852-48C4-A0D8-ADFEAC8B34BD}"
 	ProjectSection(SolutionItems) = preProject
 		CMakeLists.txt = CMakeLists.txt
+		src\DebugProps.props = src\DebugProps.props
+		src\ReleaseProps.props = src\ReleaseProps.props
+		src\SharedProps.props = src\SharedProps.props
 	EndProjectSection
 EndProject
 Global
