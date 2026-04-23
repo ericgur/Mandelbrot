@@ -128,7 +128,7 @@ The main application window derived from `QMainWindow`. Manages the menu bar, ac
 The core rendering engine derived from `QWidget`. Owns the complete fractal computation and display pipeline:
 
 - **Fractal computation** -- Implements the escape-time algorithm for both Mandelbrot (`Z(0) = 0, C = pixel`) and Julia (`Z(0) = pixel, C = constant`) sets. Iterates `Z = Z^2 + C` until `|Z| > 2` or the iteration limit is reached.
-- **Dual precision** -- `DrawImageDouble()` uses IEEE 754 doubles; `DrawImageFixedPoint128()` uses the custom `fp128_t` type (8 integer bits, 120 fractional bits) for deep zoom. In Auto mode, switches to fixed-point when zoom exceeds 2^44.
+- **Dual precision** -- `CalcIterationsDouble()` uses IEEE 754 doubles; `CalcIterationsFP128()` uses the custom `fp128_t` type (8 integer bits, 120 fractional bits) for deep zoom. In Auto mode, switches to fixed-point when zoom exceeds 2^44.
 - **Color mapping** -- Supports four palette types (Grey, Gradient, Vivid, Histogram). Uses continuous smoothing via `mu = iter - log(log(|Z|)) / log(2)` and alpha-blended interpolation between adjacent colors.
 - **Auto-iterations** -- Scales the iteration limit linearly with `log2(zoom)` from 128 (at 1x) to 2500 (at 2^113 zoom).
 - **OpenMP** -- Parallelizes the main rendering loop per scanline with `#pragma omp parallel for schedule(dynamic)`.

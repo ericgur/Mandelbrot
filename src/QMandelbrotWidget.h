@@ -16,10 +16,9 @@
 
 // include fixed point implementation from project root
 #include "fixed_point128.h"
-using namespace fp128;
 
 /// @brief 128-bit fixed-point type with 8 integer bits and 120 fractional bits.
-typedef fixed_point128<8> fp128_t;
+typedef fp128::fixed_point128<8> fp128_t;
 
 /**
  * @struct FrameStats
@@ -102,7 +101,7 @@ public:
      * @brief Get the current Julia set constant.
      * @return The complex constant C used for Julia set rendering.
      */
-    std::complex<double> juliaConstant() const { return m_JuliaConstant; }
+    std::complex<double> juliaConstant() const { return _juliaConstant; }
 
     /**
      * @brief Switch between Mandelbrot and Julia set rendering.
@@ -114,7 +113,14 @@ public:
      * @brief Query whether OpenMP parallelization is enabled.
      * @return True if OpenMP is active.
      */
-    bool openMp() const { return m_UseOpenMP; }
+    bool openMp() const { return _useOpenMP; }
+
+    virtual void invalidate(bool invalidateColorTable = true)
+    {
+        setFractalDataValid(false);
+        setColorTableValid(!invalidateColorTable);
+        update();
+    }
 
 signals:
     /**
@@ -176,7 +182,19 @@ public slots:
      * @brief Enable or disable OpenMP parallel rendering.
      * @param enable True to enable multi-threaded rendering.
      */
-    void setOpenMp(bool enable) { m_UseOpenMP = enable; }
+    void setOpenMp(bool enable) { _useOpenMP = enable; }
+
+    /**
+     * @brief Modify the palette used to draw the fractal.
+     * @param palette The palette type to use.
+     */
+    void setPaletteType(palette_t palette);
+
+    /**
+     * @brief Enable or disable smooth transitions between palette colors.
+     * @param enable True to enable smooth transitions of palette entries, false to disable.
+     */
+    void setSmoothTransitions(bool enable);
 
 protected:
     /**
@@ -207,39 +225,44 @@ private:
      * @return The computed iteration limit.
      */
     int64_t calcAutoIterationLimits();
+    inline bool fractalDataValid() const { return _fractalDataValid; }
+    inline void setFractalDataValid(bool valid = true) { _fractalDataValid = valid; }
+    inline bool colorTableValid() const { return _colorTableValid; }
+    inline void setColorTableValid(bool valid = true) { _colorTableValid = valid; }
 
     // View state
-    fp128_t m_Xmin, m_Xmax, m_Ymin, m_Ymax;  ///< View bounds in the complex plane.
-    double m_ZoomLevel;                      ///< Current zoom multiplier (1.0 = default).
-    double m_ZoomIncrement = 2.0;            ///< Zoom step factor per click.
-    int64_t m_MaxIter = 128;                 ///< Current maximum iteration count.
-    bool m_AutoIterations = false;           ///< True if iterations scale with zoom.
+    fp128_t _xmin, _xmax, _ymin, _ymax;  ///< View bounds in the complex plane.
+    double _zoomLevel;                      ///< Current zoom multiplier (1.0 = default).
+    double _zoomIncrement = 2.0;            ///< Zoom step factor per click.
+    int64_t _maxIter = 128;                 ///< Current maximum iteration count.
+    bool _autoIterations = false;           ///< True if iterations scale with zoom.
 
     // Image and buffers
-    QImage m_ImageCache;            ///< Cached rendered QImage.
-    float* m_Iterations = nullptr;  ///< Per-pixel iteration count buffer.
-    bool m_NeedToRecompute = true;  ///< True when the fractal needs recomputation.
+    QImage _imageCache;                    ///< Cached rendered QImage.
+    float* _iterations = nullptr;          ///< Per-pixel iteration count buffer.
+    bool _fractalDataValid = false;        ///< False when the fractal needs recomputation.
+    bool _colorTableValid = false;         ///< False when color tables need to rebuild, e.g. when changing from palette to another.
 
     // Color / palette data
-    QVector<QRgb> m_ColorTable;             ///< Color lookup table indexed by iteration count.
-    int* m_Histogram = nullptr;             ///< Iteration frequency histogram for palette equalization.
-    float m_HsvOffset = 0;                  ///< HSV hue rotation offset for animation.
-    palette_t m_PaletteType = palGradient;  ///< Active color palette type.
-    bool m_SmoothLevel = true;              ///< Enable smooth (fractional) iteration coloring.
+    QVector<QRgb> _colorTable;             ///< Color lookup table indexed by iteration count.
+    int* _histogram = nullptr;             ///< Iteration frequency histogram for palette equalization.
+    float _hsvOffset = 0;                  ///< HSV hue rotation offset for animation.
+    palette_t _paletteType = palGradient;  ///< Active color palette type.
+    bool _smoothLevel = true;              ///< Enable smooth (fractional) iteration coloring.
 
     // UI flags
-    Precision m_Precision = Precision::Auto;  ///< Active rendering precision mode.
-    bool m_Animate = false;                   ///< True if palette animation is running.
+    Precision _precision = Precision::Auto;  ///< Active rendering precision mode.
+    bool _animate = false;                   ///< True if palette animation is running.
 
     // Set type and Julia constants
-    set_type_t m_SetType = stMandelbrot;                 ///< Active fractal set type.
-    std::complex<double> m_JuliaConstant {0.285, 0.01};  ///< Julia set complex constant.
+    set_type_t _setType = stMandelbrot;                 ///< Active fractal set type.
+    std::complex<double> _juliaConstant {0.285, 0.01};  ///< Julia set complex constant.
 
     // Timer for animation
-    QChronoTimer m_Timer;  ///< Timer driving palette animation ticks.
+    QChronoTimer _timer;  ///< Timer driving palette animation ticks.
 
     // OpenMP support
-    bool m_UseOpenMP = true;  ///< OpenMP parallelization toggle.
+    bool _useOpenMP = true;  ///< OpenMP parallelization toggle.
 
     // Helpers
 
@@ -294,7 +317,7 @@ private:
      * @param y0 Top edge of the view in the complex plane.
      * @param dy Vertical step per pixel.
      */
-    void DrawImageDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy);
+    void CalcIterationsDouble(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy);
 
     /**
      * @brief Render the fractal using 128-bit fixed-point precision.
@@ -306,5 +329,5 @@ private:
      * @param y0 Top edge of the view in the complex plane.
      * @param dy Vertical step per pixel.
      */
-    void DrawImageFixedPoint128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+    void CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
 };

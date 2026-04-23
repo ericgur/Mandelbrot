@@ -39,20 +39,21 @@
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets</QtModules>
     <QtBuildConfig>debug</QtBuildConfig>
-    <QtDeploy>true</QtDeploy>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
+    <QtDeploy>true</QtDeploy>
+    <QtDeployDebugRelease>debug</QtDeployDebugRelease>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets</QtModules>
     <QtBuildConfig>release</QtBuildConfig>
-    <QtDeploy>true</QtDeploy>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
+    <QtDeploy>true</QtDeploy>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
@@ -98,10 +99,6 @@
     <ClCompile Include="QtMainWindow.cpp" />
   </ItemGroup>
   <ItemGroup>
-    <None Include="CLAUDE.md">
-      <SubType>
-      </SubType>
-    </None>
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>

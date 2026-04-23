@@ -52,8 +52,8 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 
 ### Dual-Precision Strategy (`QMandelbrotWidget`)
 
-- `DrawImageDouble()` — IEEE 754 `double`, up to zoom ~2⁴⁴
-- `DrawImageFixedPoint128()` — custom `fixed_point128<8>` (8 int bits, 120 fractional bits), up to zoom ~2¹¹³
+- `CalcIterationsDouble()` — IEEE 754 `double`, up to zoom ~2⁴⁴
+- `CalcIterationsFP128()` — custom `fixed_point128<8>` (8 int bits, 120 fractional bits), up to zoom ~2¹¹³
 - Auto mode switches precision when zoom exceeds 2⁴⁴
 
 ### Key Classes
@@ -71,7 +71,7 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 - **Color palettes:** Grey, Gradient, Vivid, Histogram-equalized
 - **Auto-iterations:** Scales iteration limit with `log2(zoom)` from 128 (1x) to 2500 (2¹¹³)
 - **Color animation:** `QChronoTimer` drives palette cycling
-- **Lazy redraw:** `_needToRecompute` flag prevents redundant recalculation
+- **Lazy redraw:** `_fractalDataValid` and `_colorTableValid` flags gate recomputation of iteration data and color LUT independently
 - **Mouse:** Left click = zoom 2x in; Right click = zoom 2x out; Middle = reset. Ctrl multiplies by 2x, Ctrl+Shift by 4x
 - **Keyboard:** Arrow keys pan 5%; +/- zoom 2x
 - **Export:** PNG at 1920×1080, 2560×1440, or 3840×2160

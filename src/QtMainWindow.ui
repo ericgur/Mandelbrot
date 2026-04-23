@@ -105,6 +105,15 @@ QProgressBar::chunk {
      <addaction name="actionDouble"/>
      <addaction name="actionFixedPoint128"/>
     </widget>
+    <widget class="QMenu" name="menuPalette">
+     <property name="title">
+      <string>Palette</string>
+     </property>
+     <addaction name="actionPaletteGrey"/>
+     <addaction name="actionPaletteGradient"/>
+     <addaction name="actionPaletteHistorgram"/>
+     <addaction name="actionPaletteVivid"/>
+    </widget>
     <addaction name="actionZoomIn"/>
     <addaction name="actionZoomOut"/>
     <addaction name="actionResetZoom"/>
@@ -112,6 +121,8 @@ QProgressBar::chunk {
     <addaction name="actionAnimatePalette"/>
     <addaction name="separator"/>
     <addaction name="menuPrecision"/>
+    <addaction name="menuPalette"/>
+    <addaction name="actionSmoothTranisitions"/>
    </widget>
    <widget class="QMenu" name="menuOptions">
     <property name="title">
@@ -192,6 +203,9 @@ QProgressBar::chunk {
    <property name="text">
     <string>Reset Zoom</string>
    </property>
+   <property name="shortcut">
+    <string>Esc</string>
+   </property>
   </action>
   <action name="action">
    <property name="text">
@@ -227,6 +241,9 @@ QProgressBar::chunk {
    </property>
    <property name="text">
     <string>Animate Palette</string>
+   </property>
+   <property name="shortcut">
+    <string>F5</string>
    </property>
   </action>
   <action name="actionPrecisionAuto">
@@ -400,6 +417,49 @@ QProgressBar::chunk {
    </property>
    <property name="text">
     <string>OpenMP</string>
+   </property>
+  </action>
+  <action name="actionPaletteGrey">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Grey</string>
+   </property>
+  </action>
+  <action name="actionPaletteGradient">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Gradient</string>
+   </property>
+  </action>
+  <action name="actionPaletteHistorgram">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Historgram</string>
+   </property>
+  </action>
+  <action name="actionPaletteVivid">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Vivid</string>
+   </property>
+  </action>
+  <action name="actionSmoothTranisitions">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Smooth Tranisitions</string>
+   </property>
+   <property name="shortcut">
+    <string>F4</string>
    </property>
   </action>
  </widget>

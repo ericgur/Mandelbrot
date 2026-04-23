@@ -58,6 +58,21 @@ void QtMainWindow::createActions()
     connect(ui.actionFixedPoint128, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
     connect(ui.actionDouble, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
 
+    // Palette actions
+    QActionGroup* paletteGroup = new QActionGroup(this);
+    paletteGroup->addAction(ui.actionPaletteGrey);
+    paletteGroup->addAction(ui.actionPaletteGradient);
+    paletteGroup->addAction(ui.actionPaletteHistorgram);
+    paletteGroup->addAction(ui.actionPaletteVivid);
+    paletteGroup->setExclusive(true);
+    connect(ui.actionPaletteGrey, &QAction::triggered, [this]() { m_centralWidget->setPaletteType(QMandelbrotWidget::palGrey); });
+    connect(ui.actionPaletteGradient, &QAction::triggered, [this]() { m_centralWidget->setPaletteType(QMandelbrotWidget::palGradient); });
+    connect(ui.actionPaletteHistorgram, &QAction::triggered, [this]() { m_centralWidget->setPaletteType(QMandelbrotWidget::palHistogram); });
+    connect(ui.actionPaletteVivid, &QAction::triggered, [this]() { m_centralWidget->setPaletteType(QMandelbrotWidget::palVivid); });
+    
+    // smooth transitions toggle
+    connect(ui.actionSmoothTranisitions, &QAction::toggled, m_centralWidget, &QMandelbrotWidget::setSmoothTransitions);
+
     // set type
     setTypeGroup = new QActionGroup(this);
     setTypeGroup->addAction(ui.actionTypeMandelbrot);
@@ -87,6 +102,12 @@ void QtMainWindow::createActions()
 
     // default precision
     ui.actionPrecisionAuto->setChecked(true);
+    
+    // default palette
+    ui.actionPaletteGradient->setChecked(true);
+
+    // default smooth coloring
+    ui.actionSmoothTranisitions->setChecked(true);
 }
 
 /**
