@@ -31,11 +31,16 @@ install(TARGETS ${TARGET} DESTINATION ${CMAKE_INSTALL_BINDIR})
 
 # Windows: deploy Qt DLLs alongside the executable during cmake --install
 if(WIN32)
+    message(STATUS "Configuring deployment script for Windows...")
     qt_generate_deploy_app_script(
         TARGET ${TARGET}
         OUTPUT_SCRIPT deploy_script
+        NO_TRANSLATIONS
         NO_UNSUPPORTED_PLATFORM_ERROR
     )
+    # CMAKE_INSTALL_PREFIX already points at <source>/bin, so Qt's deploy step should
+    # treat the prefix itself as the bin dir instead of appending another "bin".
+    install(CODE "set(QT_DEPLOY_BIN_DIR \".\")")
     install(SCRIPT ${deploy_script})
 endif()
 

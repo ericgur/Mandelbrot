@@ -29,12 +29,13 @@ set(CMAKE_AUTORCC TRUE)
 qt_standard_project_setup()
 
 set(CMAKE_AUTOMOC_MOC_OPTIONS "-bpch.h")
-set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR})
 
 #
 # MacOS specific info configurations
 #
 if (APPLE)
+    set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR})
+
     # Do not create a .app bundle; collect all outputs into a single directory
     set(CMAKE_MACOSX_BUNDLE FALSE)
 
@@ -52,17 +53,25 @@ if (APPLE)
     set(CMAKE_MACOSX_RPATH ON)
     set(CMAKE_INSTALL_RPATH "@loader_path")
     set(QT6_ROOT_DIR "$ENV{QT_DIR}")
-    set(QT6_LIB_DIR "${QT6_ROOT_DIR}/macos/lib")    
+    set(QT6_LIB_DIR "${QT6_ROOT_DIR}/macos/lib")
+else()
+    # Install everything (exe, DLLs, Qt plugins/translations) under <source>/bin
+    # so Qt's deploy script doesn't scatter plugins/ and translations/ into the source root.
+    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/bin")
+    set(CMAKE_INSTALL_BINDIR ".")
+    set(CMAKE_INSTALL_LIBDIR ".")
 endif()
 
 add_subdirectory(src)
 
 # Windows: install compiler runtime for LLVM builds
 if (QT_QMAKE_TARGET_MKSPEC STREQUAL "win32-clang-g++")
-    # install libc++.dll
+    # Install various runtime DLLs from the compiler's bin directory
+    # This is needed for LLVM builds on Windows since qt deploy tool may or may not copy them.
     get_filename_component(TOOL_PATH ${CMAKE_CXX_COMPILER} DIRECTORY)
-    install(FILES ${TOOL_PATH}/libc++.dll    DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
-    install(FILES ${TOOL_PATH}/libunwind.dll DESTINATION ${CMAKE_INSTALL_PREFIX}/bin)
+    install(FILES ${TOOL_PATH}/libomp.dll    DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES ${TOOL_PATH}/libc++.dll    DESTINATION ${CMAKE_INSTALL_BINDIR})
+    install(FILES ${TOOL_PATH}/libunwind.dll DESTINATION ${CMAKE_INSTALL_BINDIR})
 endif()
 
 # Create symbolic links for Qt runtime libraries in the distribution directory.

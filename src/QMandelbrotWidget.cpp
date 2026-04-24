@@ -598,7 +598,8 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
         int64_t iters = calcAutoIterationLimits();
         if (iters != _maxIter) {
             _maxIter = iters;
-            invalidate();
+            setFractalDataValid(false);
+            setColorTableValid(false);
         }
     }
 
@@ -800,17 +801,10 @@ void QMandelbrotWidget::setAnimatePalette(bool animate)
         _timer.setInterval(30ms);
         _timer.start();
     } else {
-        if (_paletteType == palHistogram) {
-            _hsvOffset = 0;
-            CreateColorTableFromHistogram(_hsvOffset);
-        } else {
-            CreateColorTables();  // reset color tables
-        }
-
+        // stop timer
+        _hsvOffset = 0;
         _timer.stop();
     }
-
-    invalidate();
 }
 
 void QMandelbrotWidget::setPrecision(Precision p)
