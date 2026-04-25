@@ -58,6 +58,7 @@ public:
     static inline constexpr int64_t max_iterations = 2500;  ///< Upper bound for iteration count.
     static inline constexpr int64_t min_iterations = 128;   ///< Lower bound for iteration count.
     static inline constexpr double logMaxZoom = 113.0;      ///< Log2 of maximum zoom (128-bit fixed-point limit).
+    static inline constexpr double logMinZoom = 0.0;        ///< Log2 of minimum zoom (x1).
 
     /** @brief Rendering precision modes. */
     enum class Precision {

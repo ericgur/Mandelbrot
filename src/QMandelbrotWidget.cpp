@@ -436,6 +436,13 @@ void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int6
                 modulus = 0;
             }
 
+            // Periodicity detection: inside-set orbits settle into a fixed cycle
+            // in IEEE 754 precision. Snapshot (u, v) at exponentially spaced
+            // iters and bail out when the current iterate matches the snapshot.
+            double uRef = 0, vRef = 0;
+            int period = 32;
+            int nextSave = period;
+
             /*
                 Complex iterative equation Z is:
                 Mandebrot: Z(0) = 0, C = (x,y)
@@ -458,6 +465,17 @@ void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int6
                 vsq = v * v;
                 usq = u * u;
                 modulus = vsq + usq;
+
+                if (u == uRef && v == vRef) {
+                    iter = (int)_maxIter;
+                    break;
+                }
+                if (iter == nextSave) {
+                    uRef = u;
+                    vRef = v;
+                    period *= 2;
+                    nextSave = iter + period;
+                }
             }
             if (_smoothLevel && iter < _maxIter) {
                 // modulus is in the range [4,36), create a scale between the 2 values.
@@ -530,6 +548,15 @@ void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, i
                 modulus = 0u;
             }
 
+            // Periodicity detection: inside-set orbits collapse to a fixed cycle
+            // in fp128 precision. Snapshot (u, v) at exponentially spaced iters
+            // and bail out as soon as the current iterate matches the snapshot.
+            // Cuts interior-pixel cost dramatically at deep zoom where _maxIter
+            // is large.
+            fp128_t uRef = 0u, vRef = 0u;
+            int period = 32;
+            int nextSave = period;
+
             /*
                 Complex iterative equation Z is:
                 Mandebrot: Z(0) = 0, C = (x,y)
@@ -553,6 +580,17 @@ void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, i
                 usq = u * u;
                 vsq = v * v;
                 modulus = usq + vsq;
+
+                if (u == uRef && v == vRef) {
+                    iter = (int)_maxIter;
+                    break;
+                }
+                if (iter == nextSave) {
+                    uRef = u;
+                    vRef = v;
+                    period *= 2;
+                    nextSave = iter + period;
+                }
             }
 
             if (_smoothLevel && iter < _maxIter) {
@@ -658,22 +696,31 @@ void QMandelbrotWidget::resizeEvent(QResizeEvent* event)
  */
 void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
 {
+    double zoomMultiplier = 0;
     if (event->button() == Qt::LeftButton) {
-        double zoomMultiplier = 2.0;
+        zoomMultiplier = _zoomIncrement;
         if (event->modifiers() & Qt::ControlModifier) {
-            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 8.0 : 4.0;
+            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? _zoomIncrement * 4 : _zoomIncrement * 2;
         }
-        _zoomLevel *= zoomMultiplier;
-        OnZoomChange(event->pos(), zoomMultiplier);
     } else if (event->button() == Qt::RightButton) {
-        double zoomMultiplier = 0.5;
+        zoomMultiplier = 0.5;
         if (event->modifiers() & Qt::ControlModifier) {
-            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 0.125 : 0.25;
+            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 1.0 / (_zoomIncrement * 4) : 1.0 / (_zoomIncrement * 2);
         }
-        _zoomLevel *= zoomMultiplier;
-        OnZoomChange(event->pos(), zoomMultiplier);
     } else if (event->button() == Qt::MiddleButton) {
         resetView();
+        return;
+    }
+
+    if (zoomMultiplier > 0) {
+        _zoomLevel *= zoomMultiplier;
+        if (_zoomLevel < 1.0) {
+            _zoomLevel = 1.0;
+        } else if (_zoomLevel > pow(2.0, logMaxZoom)) {
+            _zoomLevel = pow(2.0, logMaxZoom);
+        }
+
+        OnZoomChange(event->pos(), zoomMultiplier);
     }
 }
 
