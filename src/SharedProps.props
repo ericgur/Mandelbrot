@@ -47,7 +47,7 @@
       <PrecompiledHeader>Use</PrecompiledHeader>
       <SupportJustMyCode>false</SupportJustMyCode>
       <AdditionalOptions Condition="'$(PlatformToolset)' != 'ClangCL'">-openmp:llvm -openmp:experimental %(AdditionalOptions)</AdditionalOptions>
-      <AdditionalOptions Condition="'$(PlatformToolset)' == 'ClangCL'">-openmp %(AdditionalOptions)</AdditionalOptions>
+      <AdditionalOptions Condition="'$(PlatformToolset)' == 'ClangCL'">-openmp /std:c++20 -Wimplicit-fallthrough -Wformat -Werror=format-security %(AdditionalOptions)</AdditionalOptions>
       <PreprocessorDefinitions>_CRT_SECURE_NO_WARNINGS;OPENMP_ENABLED=1;%(PreprocessorDefinitions)</PreprocessorDefinitions>
       <PrecompiledHeaderFile>pch.h</PrecompiledHeaderFile>
       <PrecompiledHeaderOutputFile>$(SharedPch)</PrecompiledHeaderOutputFile>
