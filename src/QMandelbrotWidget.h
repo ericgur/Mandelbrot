@@ -310,6 +310,11 @@ private:
 
     /**
      * @brief Render the fractal using IEEE 754 double precision.
+     *
+     * Dispatches to the templated implementation based on the active set type
+     * so the inner iteration loop is fully specialized (no per-pixel branching
+     * between Mandelbrot and Julia code paths).
+     *
      * @param pIterations Output buffer for per-pixel iteration counts.
      * @param width Image width in pixels.
      * @param height Image height in pixels.
@@ -322,6 +327,9 @@ private:
 
     /**
      * @brief Render the fractal using 128-bit fixed-point precision.
+     *
+     * Dispatches to the templated implementation based on the active set type.
+     *
      * @param pIterations Output buffer for per-pixel iteration counts.
      * @param width Image width in pixels.
      * @param height Image height in pixels.
@@ -331,4 +339,18 @@ private:
      * @param dy Vertical step per pixel.
      */
     void CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+
+    /**
+     * @brief Templated double-precision render specialized on set type.
+     * @tparam IsJulia True for Julia, false for Mandelbrot.
+     */
+    template<bool IsJulia>
+    void CalcIterationsDoubleImpl(float* pIterations, int64_t width, int64_t height, double x0, double dx, double y0, double dy);
+
+    /**
+     * @brief Templated 128-bit fixed-point render specialized on set type.
+     * @tparam IsJulia True for Julia, false for Mandelbrot.
+     */
+    template<bool IsJulia>
+    void CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
 };

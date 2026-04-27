@@ -1,7 +1,8 @@
 {
   "permissions": {
     "allow": [
-      "Bash(ls -la /c/GitHub/Mandelbrot/*.sh /c/GitHub/Mandelbrot/*.bat)"
+      "Bash(ls -la /c/GitHub/Mandelbrot/*.sh /c/GitHub/Mandelbrot/*.bat)",
+      "Bash(cmake --build build --config RelWithDebInfo --target qMandelbrot)"
     ]
   }
 }

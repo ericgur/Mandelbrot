@@ -398,11 +398,20 @@ void QMandelbrotWidget::CreateDibFromIterations(QImage& img, const float* pItera
  */
 void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int64_t h, double x0, double dx, double y0, double dy)
 {
+    if (_setType == stJulia) {
+        CalcIterationsDoubleImpl<true>(pIterations, w, h, x0, dx, y0, dy);
+    } else {
+        CalcIterationsDoubleImpl<false>(pIterations, w, h, x0, dx, y0, dy);
+    }
+}
+
+template<bool IsJulia>
+void QMandelbrotWidget::CalcIterationsDoubleImpl(float* pIterations, int64_t w, int64_t h, double x0, double dx, double y0, double dy)
+{
     const float radius_sq = 2.0F * 2.0F;
     const float sqrt_32 = sqrt(32.f);
-    bool isJulia = (_setType == stJulia);
-    const double cr = isJulia ? _juliaConstant.real() : 0.0;
-    const double ci = isJulia ? _juliaConstant.imag() : 0.0;
+    const double cr = IsJulia ? _juliaConstant.real() : 0.0;
+    const double ci = IsJulia ? _juliaConstant.imag() : 0.0;
 
     double* xTable = new double[w];
     for (int i = 0; i < w; ++i) {
@@ -411,19 +420,19 @@ void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int6
 
 #pragma omp parallel for schedule(dynamic) if (_useOpenMP)
     for (int l = 0; l < h; ++l) {
-        double y = y0 + (dy * l);
-        double usq = 0, vsq = 0, u = 0, v = 0;
-        double xc = (isJulia) ? cr : 0;
-        double yc = (isJulia) ? ci : y;
-        double modulus = 0;
+        const double y = y0 + (dy * l);
+        const double yc = IsJulia ? ci : y;
         float* pbuff = pIterations + w * l;
 
         for (int k = 0; k < w; ++k) {
             int iter = 0;
-            double x = xTable[k];
-            if (isJulia) {
+            const double x = xTable[k];
+            double u, v, usq, vsq, modulus, xc;
+
+            if constexpr (IsJulia) {
                 u = x;
                 v = y;
+                xc = cr;
                 usq = u * u;
                 vsq = v * v;
                 modulus = usq + vsq;
@@ -458,7 +467,7 @@ void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int6
                 ++iter;
 
                 // real
-                double tmp = usq - vsq + xc;
+                const double tmp = usq - vsq + xc;
                 // imaginary:
                 v = 2.0 * (u * v) + yc;
                 u = tmp;
@@ -508,11 +517,20 @@ void QMandelbrotWidget::CalcIterationsDouble(float* pIterations, int64_t w, int6
  */
 void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
 {
+    if (_setType == stJulia) {
+        CalcIterationsFP128Impl<true>(pIterations, width, height, x0, dx, y0, dy);
+    } else {
+        CalcIterationsFP128Impl<false>(pIterations, width, height, x0, dx, y0, dy);
+    }
+}
+
+template<bool IsJulia>
+void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
+{
     const fp128_t radius_sq = 2 * 2;
     const float sqrt_32 = sqrt(32.f);
-    bool isJulia = (_setType == stJulia);
-    const fp128_t cr = isJulia ? _juliaConstant.real() : 0.0;
-    const fp128_t ci = isJulia ? _juliaConstant.imag() : 0.0;
+    const fp128_t cr = IsJulia ? _juliaConstant.real() : 0.0;
+    const fp128_t ci = IsJulia ? _juliaConstant.imag() : 0.0;
 
     fp128_t* xTable = new fp128_t[width];
     for (int i = 0; i < width; ++i) {
@@ -521,30 +539,28 @@ void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, i
 
 #pragma omp parallel for schedule(dynamic) if (_useOpenMP)
     for (int l = 0; l < height; ++l) {
-        fp128_t y = y0 + (dy * l);
-        fp128_t usq, vsq, u, v, x, tmp, modulus;
-        fp128_t xc = (isJulia) ? cr : fp128_t(0);
-        fp128_t yc = (isJulia) ? ci : y;
+        const fp128_t y = y0 + (dy * l);
+        const fp128_t yc = IsJulia ? ci : y;
         float* pbuff = pIterations + width * l;
 
         for (int k = 0; k < width; ++k) {
             int iter = 0;
-            x = xTable[k];
-            // Julia
-            if (isJulia) {
+            fp128_t u, v, usq, vsq, modulus, xc, tmp;
+            const fp128_t x = xTable[k];
+
+            if constexpr (IsJulia) {
                 u = x;
                 v = y;
+                xc = cr;
                 usq = u * u;
                 vsq = v * v;
                 modulus = usq + vsq;
-            }
-            // Mandelbrot
-            else {
+            } else {
                 u = 0u;
                 v = 0u;
+                xc = x;
                 usq = 0u;
                 vsq = 0u;
-                xc = x;
                 modulus = 0u;
             }
 
