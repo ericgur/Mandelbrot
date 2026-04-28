@@ -53,10 +53,12 @@ void QtMainWindow::createActions()
     precisionGroup->addAction(ui.actionPrecisionAuto);
     precisionGroup->addAction(ui.actionDouble);
     precisionGroup->addAction(ui.actionFixedPoint128);
+    precisionGroup->addAction(ui.actionPerturbation);
     precisionGroup->setExclusive(true);
     connect(ui.actionPrecisionAuto, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
     connect(ui.actionFixedPoint128, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
     connect(ui.actionDouble, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
+    connect(ui.actionPerturbation, &QAction::triggered, this, &QtMainWindow::onActionPrecision);
 
     // Palette actions
     QActionGroup* paletteGroup = new QActionGroup(this);
@@ -147,6 +149,8 @@ void QtMainWindow::onActionPrecision()
         m_centralWidget->setPrecision(QMandelbrotWidget::Precision::Double);
     else if (act == ui.actionFixedPoint128)
         m_centralWidget->setPrecision(QMandelbrotWidget::Precision::FixedPoint128);
+    else if (act == ui.actionPerturbation)
+        m_centralWidget->setPrecision(QMandelbrotWidget::Precision::Perturbation);
 }
 
 /**

@@ -62,9 +62,10 @@ public:
 
     /** @brief Rendering precision modes. */
     enum class Precision {
-        Auto,          ///< Double up to zoom 2^44, then FixedPoint128.
-        Double,        ///< Force IEEE 754 double precision.
-        FixedPoint128  ///< Force 128-bit fixed-point precision.
+        Auto,           ///< Double up to zoom 2^44, then FixedPoint128.
+        Double,         ///< Force IEEE 754 double precision.
+        FixedPoint128,  ///< Force 128-bit fixed-point precision.
+        Perturbation    ///< Perturbation theory with fp128 reference + double deltas (Mandelbrot only).
     };
 
     /** @brief Color palette types. */
@@ -353,4 +354,38 @@ private:
      */
     template<bool IsJulia>
     void CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+
+    /**
+     * @brief Render the Mandelbrot set using perturbation theory.
+     *
+     * Computes one high-precision reference orbit (fp128) at the view center,
+     * then iterates each pixel as a small @c double delta around that orbit.
+     * Pixels that glitch (Pauldelbrot's criterion: |Z+Δ|² ≪ |Z|²) or that
+     * iterate past the reference's escape point fall back to per-pixel fp128.
+     *
+     * Falls back to CalcIterationsFP128Impl for Julia (perturbation needs a
+     * different reformulation that isn't implemented here).
+     *
+     * @param pIterations Output buffer for per-pixel iteration counts.
+     * @param width Image width in pixels.
+     * @param height Image height in pixels.
+     * @param x0 Left edge of the view in the complex plane.
+     * @param dx Horizontal step per pixel.
+     * @param y0 Top edge of the view in the complex plane.
+     * @param dy Vertical step per pixel.
+     */
+    void CalcIterationsPerturbation(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+
+    /**
+     * @brief Compute a single Mandelbrot pixel at full fp128 precision.
+     *
+     * Used by the perturbation path as a fallback for glitched pixels and
+     * pixels whose orbit outlives the reference. Inlined helper rather than
+     * a separate template to avoid touching the main fp128 dispatcher.
+     *
+     * @param cx Pixel real coordinate in the complex plane.
+     * @param cy Pixel imaginary coordinate in the complex plane.
+     * @return Smooth or integer iteration count, depending on _smoothLevel.
+     */
+    float CalcSinglePixelFP128(fp128_t cx, fp128_t cy);
 };

@@ -623,6 +623,195 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
 }
 
 /**
+ * @brief Compute a single Mandelbrot pixel at full fp128 precision.
+ *
+ * Used by the perturbation path as a fallback for glitched pixels and pixels
+ * whose orbit outlives the reference. Mirrors the inner loop of
+ * CalcIterationsFP128Impl<false>() but for one pixel.
+ */
+float QMandelbrotWidget::CalcSinglePixelFP128(fp128_t cx, fp128_t cy)
+{
+    const fp128_t radius_sq = 4u;
+    const float sqrt_32 = sqrt(32.f);
+
+    fp128_t u = 0u, v = 0u, usq = 0u, vsq = 0u, modulus = 0u, tmp;
+    fp128_t uRef = 0u, vRef = 0u;
+    int period = 32;
+    int nextSave = period;
+    int iter = 0;
+
+    while (iter < _maxIter && modulus < radius_sq) {
+        ++iter;
+        tmp = usq - vsq + cx;
+        v = ((u * v) << 1) + cy;
+        u = tmp;
+        usq = u * u;
+        vsq = v * v;
+        modulus = usq + vsq;
+
+        if (u == uRef && v == vRef) {
+            iter = (int)_maxIter;
+            break;
+        }
+        if (iter == nextSave) {
+            uRef = u;
+            vRef = v;
+            period *= 2;
+            nextSave = iter + period;
+        }
+    }
+
+    if (_smoothLevel && iter < _maxIter) {
+        return (float)(iter + 1) - (float)sqrt((float)(modulus - radius_sq)) / sqrt_32;
+    }
+    return (float)std::max(iter, 1);
+}
+
+/**
+ * @brief Render the Mandelbrot set using perturbation theory.
+ *
+ * Computes one fp128 reference orbit at the view center, then iterates each
+ * pixel as a small @c double delta against that orbit using:
+ * @code
+ *     Δ_{n+1} = 2·Z_n·Δ_n + Δ_n² + δc
+ *     A_n     = Z_n + Δ_n   (actual orbit)
+ * @endcode
+ * Each iteration is 8 double multiplies — vs. 3 fp128 multiplies in the
+ * standard path — so the speedup grows with the cost ratio of fp128:double
+ * arithmetic (roughly 30–100× per multiply at this width).
+ *
+ * Pixels that satisfy Pauldelbrot's glitch criterion (|A|² ≪ |Z|²) or that
+ * iterate past the reference's escape point fall back to per-pixel fp128.
+ * Glitched-pixel fallback is correct but slow; for production use you'd
+ * rebase the reference rather than rerun fp128, but this version is enough
+ * for performance comparison.
+ *
+ * Julia is not handled by this path and falls through to CalcIterationsFP128Impl<true>().
+ */
+void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w, int64_t h, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
+{
+    if (_setType == stJulia) {
+        CalcIterationsFP128Impl<true>(pIterations, w, h, x0, dx, y0, dy);
+        return;
+    }
+
+    const double radius_sq = 4.0;
+    const float sqrt_32 = sqrt(32.f);
+    constexpr double glitch_eps = 1e-6;
+
+    // 1. Reference orbit at the view center, computed in fp128. Save the
+    //    real/imag parts and modulus as doubles for the inner perturbation loop.
+    const int64_t refX = w / 2;
+    const int64_t refY = h / 2;
+    const fp128_t cxRef = x0 + dx * refX;
+    const fp128_t cyRef = y0 + dy * refY;
+
+    auto refZx = std::make_unique<double[]>((size_t)_maxIter + 1);
+    auto refZy = std::make_unique<double[]>((size_t)_maxIter + 1);
+    auto refZmod = std::make_unique<double[]>((size_t)_maxIter + 1);
+    refZx[0] = refZy[0] = refZmod[0] = 0.0;
+
+    int64_t refLen = _maxIter;
+    {
+        fp128_t zx = 0u, zy = 0u, zxsq = 0u, zysq = 0u, zmod = 0u, ztmp;
+        const fp128_t four = 4u;
+        for (int64_t n = 1; n <= _maxIter; ++n) {
+            ztmp = zxsq - zysq + cxRef;
+            zy = ((zx * zy) << 1) + cyRef;
+            zx = ztmp;
+            zxsq = zx * zx;
+            zysq = zy * zy;
+            zmod = zxsq + zysq;
+
+            const double zxd = (double)zx;
+            const double zyd = (double)zy;
+            refZx[n] = zxd;
+            refZy[n] = zyd;
+            refZmod[n] = zxd * zxd + zyd * zyd;
+
+            if (zmod >= four) {
+                refLen = n;
+                break;
+            }
+        }
+    }
+    const bool refEscaped = (refLen < _maxIter);
+
+    // 2. Pre-compute (k - refX) * dx as doubles. dx is tiny at deep zoom so
+    //    these fit cleanly in IEEE 754.
+    auto dcxTable = std::make_unique<double[]>((size_t)w);
+    for (int64_t k = 0; k < w; ++k) {
+        dcxTable[k] = (double)(dx * (k - refX));
+    }
+
+#pragma omp parallel for schedule(dynamic) if (_useOpenMP)
+    for (int l = 0; l < h; ++l) {
+        const double dcy = (double)(dy * (l - refY));
+        float* pbuff = pIterations + w * l;
+
+        for (int k = 0; k < w; ++k) {
+            const double dcx = dcxTable[k];
+
+            double Dx = 0, Dy = 0;
+            int iter = 0;
+            bool escaped = false;
+            bool glitched = false;
+            double mod = 0;
+
+            while (iter < refLen) {
+                const double zx_n = refZx[iter];
+                const double zy_n = refZy[iter];
+
+                // Δ_{n+1} = 2·Z_n·Δ_n + Δ_n² + δc
+                const double newDx = 2.0 * (zx_n * Dx - zy_n * Dy) + (Dx * Dx - Dy * Dy) + dcx;
+                const double newDy = 2.0 * (zx_n * Dy + zy_n * Dx) + 2.0 * Dx * Dy + dcy;
+                Dx = newDx;
+                Dy = newDy;
+                ++iter;
+
+                const double ax = refZx[iter] + Dx;
+                const double ay = refZy[iter] + Dy;
+                mod = ax * ax + ay * ay;
+
+                if (mod >= radius_sq) {
+                    escaped = true;
+                    break;
+                }
+                // Pauldelbrot glitch check: |A|² ≪ |Z|² means catastrophic
+                // cancellation when forming A = Z + Δ. Bail out and rerun
+                // this pixel at full fp128 precision.
+                if (mod < glitch_eps * refZmod[iter]) {
+                    glitched = true;
+                    break;
+                }
+            }
+
+            // Reference exhausted before this pixel escaped: no high-precision
+            // data left to perturb against. Fall back to fp128.
+            const bool refExhausted = !escaped && !glitched && refEscaped && iter == refLen;
+
+            float result;
+            if (glitched || refExhausted) {
+                const fp128_t cx = x0 + dx * k;
+                const fp128_t cy = y0 + dy * l;
+                result = CalcSinglePixelFP128(cx, cy);
+            } else if (escaped) {
+                if (_smoothLevel) {
+                    result = (float)(iter + 1) - (float)sqrt(mod - radius_sq) / sqrt_32;
+                } else {
+                    result = (float)std::max(iter, 1);
+                }
+            } else {
+                // Reached _maxIter without escape — inside the set.
+                result = (float)_maxIter;
+            }
+
+            *pbuff++ = result;
+        }
+    }
+}
+
+/**
  * @brief Render the fractal and paint it to the widget surface.
  *
  * Allocates or reallocates the iteration buffer on resize, selects the
@@ -668,8 +857,12 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
 
         if (_precision == Precision::Double || (_precision == Precision::Auto && _zoomLevel <= MAX_DOUBLE_ZOOM_LEVEL)) {
             CalcIterationsDouble(_iterations, w, h, (double)_xmin, (double)dx, (double)_ymin, (double)dy);
-        } else {
+        } else if (_precision == Precision::FixedPoint128) {
             CalcIterationsFP128(_iterations, w, h, _xmin, dx, _ymin, dy);
+        } else {
+            // Auto past 2^44 and explicit Perturbation both land here.
+            // Julia falls through to fp128 inside CalcIterationsPerturbation.
+            CalcIterationsPerturbation(_iterations, w, h, _xmin, dx, _ymin, dy);
         }
 
         setFractalDataValid();
@@ -794,8 +987,10 @@ void QMandelbrotWidget::saveImage(int width, int height)
 
     if (_precision == Precision::Double || (_precision == Precision::Auto && _zoomLevel <= MAX_DOUBLE_ZOOM_LEVEL)) {
         CalcIterationsDouble(iterations.get(), width, height, (double)_xmin, (double)dx, (double)yMin, (double)dy);
-    } else {
+    } else if (_precision == Precision::FixedPoint128) {
         CalcIterationsFP128(iterations.get(), width, height, _xmin, dx, yMin, dy);
+    } else {
+        CalcIterationsPerturbation(iterations.get(), width, height, _xmin, dx, yMin, dy);
     }
 
     if (_paletteType == palHistogram) {

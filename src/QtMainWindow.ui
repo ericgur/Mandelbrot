@@ -104,6 +104,7 @@ QProgressBar::chunk {
      <addaction name="actionPrecisionAuto"/>
      <addaction name="actionDouble"/>
      <addaction name="actionFixedPoint128"/>
+     <addaction name="actionPerturbation"/>
     </widget>
     <widget class="QMenu" name="menuPalette">
      <property name="title">
@@ -268,6 +269,14 @@ QProgressBar::chunk {
    </property>
    <property name="text">
     <string>Fixed point 128</string>
+   </property>
+  </action>
+  <action name="actionPerturbation">
+   <property name="checkable">
+    <bool>true</bool>
+   </property>
+   <property name="text">
+    <string>Perturbation</string>
    </property>
   </action>
   <action name="actionType">
