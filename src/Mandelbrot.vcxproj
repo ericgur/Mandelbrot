@@ -64,7 +64,6 @@
     <QtBuildConfig>debug</QtBuildConfig>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
-    <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
     <QtDeploy>true</QtDeploy>
     <QtDeployDebugRelease>debug</QtDeployDebugRelease>
@@ -74,7 +73,6 @@
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
-    <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
@@ -83,7 +81,6 @@
     <QtBuildConfig>debug</QtBuildConfig>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
-    <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>deploy</QtDeployCompilerRuntime>
     <QtDeploy>true</QtDeploy>
     <QtDeployDebugRelease>debug</QtDeployDebugRelease>
@@ -93,7 +90,6 @@
     <QtBuildConfig>release</QtBuildConfig>
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
-    <QtDeployNoSystemD3dCompiler>true</QtDeployNoSystemD3dCompiler>
     <QtDeployCompilerRuntime>deploy</QtDeployCompilerRuntime>
     <QtDeploy>true</QtDeploy>
   </PropertyGroup>
