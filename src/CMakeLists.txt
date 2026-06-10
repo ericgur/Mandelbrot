@@ -10,10 +10,14 @@ set(app_icon_resource_windows "${CMAKE_CURRENT_SOURCE_DIR}/Mandelbrot.rc")
 qt_add_executable(${TARGET} ${SOURCE_FILES} ${app_icon_macos} ${app_icon_resource_windows})
 
 if(APPLE)
-    # Create a macOS .app bundle based on the global variable; build a plain executable and let the top-level CMake
-    # collect and deploy runtimes into the single dist directory.
+    # Build a macOS .app bundle with proper metadata and icon.
     set_target_properties(${TARGET} PROPERTIES
-        MACOSX_BUNDLE ${CMAKE_MACOSX_BUNDLE}
+        MACOSX_BUNDLE TRUE
+        MACOSX_BUNDLE_BUNDLE_NAME "qMandelbrot"
+        MACOSX_BUNDLE_GUI_IDENTIFIER "com.ericgur.qMandelbrot"
+        MACOSX_BUNDLE_BUNDLE_VERSION "1.0"
+        MACOSX_BUNDLE_SHORT_VERSION_STRING "1.0"
+        MACOSX_BUNDLE_ICON_FILE "Mandelbrot.icns"
     )
 elseif(WIN32)
     set_target_properties(${TARGET} PROPERTIES
@@ -27,32 +31,26 @@ target_precompile_headers(${TARGET} PUBLIC pch.h)
 target_link_libraries(${TARGET} PRIVATE Qt6::Core Qt6::Widgets Qt6::Gui)
 target_include_directories(${TARGET} PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${Qt6Gui_INCLUDE_DIRS} ${Qt6Widgets_INCLUDE_DIRS})
 
-install(TARGETS ${TARGET} DESTINATION ${CMAKE_INSTALL_BINDIR})
+install(TARGETS ${TARGET}
+    BUNDLE  DESTINATION ${CMAKE_INSTALL_BINDIR}
+    RUNTIME DESTINATION ${CMAKE_INSTALL_BINDIR}
+)
 
-# Windows: deploy Qt DLLs alongside the executable during cmake --install
-if(WIN32)
-    message(STATUS "Configuring deployment script for Windows...")
+# Deploy Qt runtime during cmake --install: on Windows copy DLLs/plugins next to
+# the executable; on macOS macdeployqt embeds the Qt frameworks and plugins inside
+# the .app bundle so it is self-contained.
+if(WIN32 OR APPLE)
+    message(STATUS "Configuring Qt deployment script...")
     qt_generate_deploy_app_script(
         TARGET ${TARGET}
         OUTPUT_SCRIPT deploy_script
         NO_TRANSLATIONS
         NO_UNSUPPORTED_PLATFORM_ERROR
     )
-    # CMAKE_INSTALL_PREFIX already points at <source>/bin, so Qt's deploy step should
-    # treat the prefix itself as the bin dir instead of appending another "bin".
-    install(CODE "set(QT_DEPLOY_BIN_DIR \".\")")
+    if(WIN32)
+        # CMAKE_INSTALL_PREFIX already points at <source>/bin, so Qt's deploy step should
+        # treat the prefix itself as the bin dir instead of appending another "bin".
+        install(CODE "set(QT_DEPLOY_BIN_DIR \".\")")
+    endif()
     install(SCRIPT ${deploy_script})
-endif()
-
-# If on macOS set output directories and rpaths so everything is collected in ${DIST_DIR}
-if(APPLE)
-    # set output directories so all build artifacts go to the same folder
-    set_target_properties(${TARGET} PROPERTIES
-        RUNTIME_OUTPUT_DIRECTORY "${DIST_DIR}"
-        LIBRARY_OUTPUT_DIRECTORY "${DIST_DIR}"
-        ARCHIVE_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}/lib"
-        # use @loader_path so the binary will look next to itself for dylibs placed in the same directory
-        INSTALL_RPATH "@loader_path"
-        BUILD_RPATH "@loader_path"
-    )
 endif()

@@ -10,7 +10,7 @@ if ! ./build.sh ${config}; then
     exit 1
 fi
 
-rm -fr qATE.app
+rm -fr bin/qMandelbrot.app
 cmake --install build --config ${config} || {
     echo "Install failed"
     exit 1

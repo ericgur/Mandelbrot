@@ -34,33 +34,18 @@ set(CMAKE_AUTOMOC_MOC_OPTIONS "-bpch.h")
 # MacOS specific info configurations
 #
 if (APPLE)
-    set(CMAKE_INSTALL_PREFIX ${CMAKE_SOURCE_DIR})
-
-    # Do not create a .app bundle; collect all outputs into a single directory
-    set(CMAKE_MACOSX_BUNDLE FALSE)
-
-    # Distribution directory where all binaries and shared libs will be collected
-    set(DIST_DIR "${CMAKE_CURRENT_SOURCE_DIR}/bin")
-    file(MAKE_DIRECTORY "${DIST_DIR}")
-
-    # Keep FRAMEWORK_DIR variable for compatibility, point at DIST_DIR
-    set(FRAMEWORK_DIR "${DIST_DIR}")
-    set(CMAKE_INSTALL_BINDIR ${DIST_DIR})
-    set(CMAKE_INSTALL_LIBDIR ${DIST_DIR})
-
-    # Ensure rpath handling is enabled and prefer loader-relative paths at runtime
-    set(CMAKE_BUILD_WITH_INSTALL_RPATH TRUE)
+    # Build a self-contained macOS .app bundle. Qt's deploy script (macdeployqt)
+    # embeds the required Qt frameworks and plugins inside the bundle.
+    set(CMAKE_MACOSX_BUNDLE TRUE)
     set(CMAKE_MACOSX_RPATH ON)
-    set(CMAKE_INSTALL_RPATH "@loader_path")
-    set(QT6_ROOT_DIR "$ENV{QT_DIR}")
-    set(QT6_LIB_DIR "${QT6_ROOT_DIR}/macos/lib")
-else()
-    # Install everything (exe, DLLs, Qt plugins/translations) under <source>/bin
-    # so Qt's deploy script doesn't scatter plugins/ and translations/ into the source root.
-    set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/bin")
-    set(CMAKE_INSTALL_BINDIR ".")
-    set(CMAKE_INSTALL_LIBDIR ".")
 endif()
+
+# Install everything under <source>/bin: the .app bundle on macOS, or the exe plus
+# Qt DLLs/plugins on Windows. Keeping BINDIR "." stops Qt's deploy script from
+# scattering plugins/ and translations/ into the source root.
+set(CMAKE_INSTALL_PREFIX "${CMAKE_SOURCE_DIR}/bin")
+set(CMAKE_INSTALL_BINDIR ".")
+set(CMAKE_INSTALL_LIBDIR ".")
 
 add_subdirectory(src)
 
@@ -72,15 +57,4 @@ if (QT_QMAKE_TARGET_MKSPEC STREQUAL "win32-clang-g++")
     install(FILES ${TOOL_PATH}/libomp.dll    DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES ${TOOL_PATH}/libc++.dll    DESTINATION ${CMAKE_INSTALL_BINDIR})
     install(FILES ${TOOL_PATH}/libunwind.dll DESTINATION ${CMAKE_INSTALL_BINDIR})
-endif()
-
-# Create symbolic links for Qt runtime libraries in the distribution directory.
-# This places symlinks to the actual Qt6 library files (Core/Widgets/Gui)
-# inside `DIST_DIR` so packaging/packagers can find them easily.
-if (APPLE)
-    message(STATUS "Creating symlinks for Qt6 frameworks in ${DIST_DIR}")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E make_directory "${DIST_DIR}")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${QT6_LIB_DIR}/QtCore.framework" "${DIST_DIR}/QtCore.framework")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${QT6_LIB_DIR}/QtWidgets.framework" "${DIST_DIR}/QtWidgets.framework")
-    execute_process(COMMAND ${CMAKE_COMMAND} -E create_symlink "${QT6_LIB_DIR}/QtGui.framework" "${DIST_DIR}/QtGui.framework")
 endif()
