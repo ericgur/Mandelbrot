@@ -812,7 +812,7 @@ public:
     FP128_FORCE_INLINE fixed_point128& operator*=(const fixed_point128& rhs) noexcept
     {
         // Temporary arrays to store the result. They are uninitialzied to get 10-50% extra performance.
-        // Zero initialization is a 10% penalty and using a thread_local static variable lowers
+        // Zero initialization is a 10% penalty and using a thread_local static varible lowers
         //  performance by >50%.
 
         uint64_t res[4];  // 256 bit of result
