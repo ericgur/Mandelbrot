@@ -65,7 +65,7 @@
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
     <QtDeployDebugRelease>debug</QtDeployDebugRelease>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release|x64'" Label="QtSettings">
@@ -74,7 +74,7 @@
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployCompilerRuntime>skip</QtDeployCompilerRuntime>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Debug-Clang|x64'" Label="QtSettings">
     <QtModules>core;gui;widgets</QtModules>
@@ -82,7 +82,7 @@
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployCompilerRuntime>deploy</QtDeployCompilerRuntime>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
     <QtDeployDebugRelease>debug</QtDeployDebugRelease>
   </PropertyGroup>
   <PropertyGroup Condition="'$(Configuration)|$(Platform)' == 'Release-Clang|x64'" Label="QtSettings">
@@ -91,7 +91,7 @@
     <QtDeployNoQuickImport>true</QtDeployNoQuickImport>
     <QtDeployNoTranslations>true</QtDeployNoTranslations>
     <QtDeployCompilerRuntime>deploy</QtDeployCompilerRuntime>
-    <QtDeploy>true</QtDeploy>
+    <QtDeploy>false</QtDeploy>
   </PropertyGroup>
   <Target Name="QtMsBuildNotFound" BeforeTargets="CustomBuild;ClCompile" Condition="!Exists('$(QtMsBuild)\qt.targets') or !Exists('$(QtMsBuild)\qt.props')">
     <Message Importance="High" Text="QtMsBuild: could not locate qt.targets, qt.props; project may not build correctly." />
@@ -144,10 +144,6 @@
     <Link>
       <AdditionalDependencies>libomp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy /Y /D "$(VCInstallDir)Tools\Llvm\x64\bin\libomp.dll" "$(OutDir)"</Command>
-      <Message>Deploying libomp.dll</Message>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemDefinitionGroup Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">
     <ClCompile>
@@ -158,10 +154,6 @@
     <Link>
       <AdditionalDependencies>libomp.lib;%(AdditionalDependencies)</AdditionalDependencies>
     </Link>
-    <PostBuildEvent>
-      <Command>xcopy /Y /D "$(VCInstallDir)Tools\Llvm\x64\bin\libomp.dll" "$(OutDir)"</Command>
-      <Message>Deploying libomp.dll</Message>
-    </PostBuildEvent>
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ComplexSelectDlg.h" />

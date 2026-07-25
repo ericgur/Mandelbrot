@@ -63,6 +63,24 @@
       <AdditionalLibraryDirectories>$(LibDir);%(AdditionalLibraryDirectories)</AdditionalLibraryDirectories>
     </Link>
   </ItemDefinitionGroup>
+  <!--
+    Deploy the Qt runtime via windeployqt as a post-build step.
+    The integrated QtMsBuild deploy (QtDeploy) is disabled in Mandelbrot.vcxproj: windeployqt
+    6.11 leaks a "Skipping system library ..." line into its list output, which breaks
+    qtdeploy.targets' %(FullPath) parsing on a fresh build (MSB4023). Running windeployqt
+    directly here routes that line to the build console harmlessly.
+    windeployqt auto-detects debug vs. release from the binary, so Debug and Release share one
+    command; only the compiler-runtime choice differs by toolset (skip on MSVC, deploy on ClangCL,
+    which also needs libomp.dll copied next to the binary).
+  -->
+  <ItemDefinitionGroup>
+    <PostBuildEvent>
+      <Command Condition="'$(PlatformToolset)' != 'ClangCL'">"$(QtToolsPath)\windeployqt.exe" --no-translations --no-quick-import --no-compiler-runtime "$(TargetPath)"</Command>
+      <Command Condition="'$(PlatformToolset)' == 'ClangCL'">xcopy /Y /D "$(VCInstallDir)Tools\Llvm\x64\bin\libomp.dll" "$(OutDir)"
+"$(QtToolsPath)\windeployqt.exe" --no-translations --no-quick-import --compiler-runtime "$(TargetPath)"</Command>
+      <Message>Deploying Qt runtime via windeployqt</Message>
+    </PostBuildEvent>
+  </ItemDefinitionGroup>
   <ItemGroup>
     <BuildMacro Include="BuildDir">
       <Value>$(BuildDir)</Value>
