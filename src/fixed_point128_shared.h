@@ -622,8 +622,8 @@ template <int shift> [[nodiscard]] FP128_INLINE uint64_t shift_right128(uint64_t
  * @
  * @return Upper 64 bit of the result
  */
-template <int shift> [[nodiscard]] FP128_INLINE uint64_t shift_left128(uint64_t l, uint64_t h) noexcept
-{
+ template <int shift> [[nodiscard]] FP128_FORCE_INLINE uint64_t shift_left128(uint64_t l, uint64_t h) noexcept
+ {
     FP128_ASSERT(shift >= 0 && shift < 128);
     if constexpr (shift == 0) {
         return h;
@@ -642,7 +642,7 @@ template <int shift> [[nodiscard]] FP128_INLINE uint64_t shift_left128(uint64_t 
  * @param shift Bits to shift, between 0-127
  * @return Lower 64 bit of the result
  */
-[[nodiscard]] FP128_INLINE uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
+[[nodiscard]] FP128_FORCE_INLINE uint64_t shift_right128(uint64_t l, uint64_t h, int shift) noexcept
 {
     FP128_ASSERT(shift >= 0 && shift < 128);
     switch (shift >> 6) {

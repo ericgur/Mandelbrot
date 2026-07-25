@@ -855,6 +855,60 @@ public:
         return *this;
     }
     /**
+     * @brief Squares this object in place.
+     *
+     * Cheaper than operator*=(*this): a square is symmetric, so the two cross products
+     * low*high and high*low are the same value and only one 64x64->128 bit multiply is
+     * needed instead of two. The sign is also known in advance (a square is never
+     * negative), which removes the sign xor and the zero-sign fixup.
+     *
+     * The 256 bit intermediate product is accumulated exactly as in operator*=, so the
+     * result is bit identical to (*this) * (*this), including rounding.
+     *
+     * @return This object.
+     */
+    FP128_FORCE_INLINE fixed_point128& square() noexcept
+    {
+        // Temporary arrays to store the result. They are uninitialized to get extra
+        // performance, same as in operator*=.
+        uint64_t res[4];  // 256 bit of result
+        uint64_t cross[2];
+
+        // multiply the low QWORD by itself
+        res[0] = mulx_u64(low, low, &res[1]);
+
+        // multiply the high QWORD by itself (overflow can happen)
+        res[2] = mulx_u64(high, high, &res[3]);
+
+        // the low * high cross product, which appears twice in the sum
+        cross[0] = mulx_u64(low, high, &cross[1]);
+
+        uint8_t carry = addcarryx_u64(0, res[1], cross[0], &res[1]);
+        res[3] += addcarryx_u64(carry, res[2], cross[1], &res[2]);
+
+        carry = addcarryx_u64(0, res[1], cross[0], &res[1]);
+        res[3] += addcarryx_u64(carry, res[2], cross[1], &res[2]);
+
+        // extract the bits from res[] keeping the precision the same as this object
+        // shift result by F
+        constexpr int32_t index = (F == 64) ? 0 : F / 64;
+        constexpr int32_t lsb = (F == 64) ? 64 : (F & FP128_MAX_VALUE_64(6)); // bit within the 64bit data pointed by res[index]
+        constexpr uint64_t half = 1ull << (lsb - 1);                          // used for rounding
+        const bool need_rounding = (res[index] & half) != 0;
+
+        // copy block #1 (lowest)
+        low  = shift_right128<lsb>(res[index],     res[index + 1]);
+        high = shift_right128<lsb>(res[index + 1], res[index + 2]);
+
+        if (need_rounding) {
+            ++low;  // low will wrap around to zero if overflowed
+            high += low == 0;
+        }
+        // a square is never negative, and the sign of zero is zero as well
+        sign = 0;
+        return *this;
+    }
+    /**
      * @brief Multiplies a value to this object
      * @param x Right hand side operand
      * @return This object.
@@ -1703,7 +1757,17 @@ private:
      * @param y Second value
      * @return sqrt(x^2 + y^2).
      */
-    [[nodiscard]] friend FP128_INLINE fixed_point128 hypot(const fixed_point128& x, const fixed_point128& y) noexcept { return sqrt(x * x + y * y); }
+    [[nodiscard]] friend FP128_INLINE fixed_point128 hypot(const fixed_point128& x, const fixed_point128& y) noexcept { return sqrt(sqr(x) + sqr(y)); }
+    /**
+     * @brief Calculates the square of a value. i.e. x^2
+     *
+     * Faster than x * x and bit identical to it. Prefer this function wherever a value is
+     * multiplied by itself, see fixed_point128::square().
+     *
+     * @param x Value to square
+     * @return x^2, which is never negative.
+     */
+    [[nodiscard]] friend FP128_INLINE fixed_point128 sqr(fixed_point128 x) noexcept { return x.square(); }
     /**
      * @brief Calculates the left zero count of value x, ignoring the sign.
      * @param x input value.
@@ -1998,7 +2062,7 @@ private:
         assert(fabs(x) <= fixed_point128::half_pi());
 
         // first part of the series is just 'x'
-        const fixed_point128 xx = x * x;
+        const fixed_point128 xx = sqr(x);
         fixed_point128 elem_denom, elem_nom = x;
 
         // compute the rest of the series, starting with: -(x^3 / 3!)
@@ -2296,7 +2360,7 @@ private:
     [[nodiscard]] friend FP128_INLINE fixed_point128 asinh(const fixed_point128& x) noexcept
     {
         fixed_point128 absx = fabs(x);
-        fixed_point128 res = log(absx + sqrt(absx * absx + fixed_point128::one()));
+        fixed_point128 res = log(absx + sqrt(sqr(absx) + fixed_point128::one()));
 
         return (x.is_positive()) ? res : -res;
     }
@@ -2348,7 +2412,7 @@ private:
         if (x < 1)
             return 0;
 
-        fixed_point128 res = log(x + sqrt(x * x - fixed_point128::one()));
+        fixed_point128 res = log(x + sqrt(sqr(x) - fixed_point128::one()));
         return res;
     }
     /**
@@ -2420,7 +2484,7 @@ private:
                 if (ix & 1)
                     exp_ix *= b;
                 ix >>= 1;
-                b *= b;
+                b.square();
             }
         } else {
             exp_ix = 1;
@@ -2529,8 +2593,7 @@ private:
         const auto high2 = two.high;
         fixed_point128 fy;  // fraction part of the result
         for (auto i = 0; i < fixed_point128::F; ++i) {
-            // x = x * x
-            x *= x;
+            x.square();
             // if x is greater than 2, we have another bit in the result
             if (x.high >= high2) {
                 // divide x by 2 using inplace shifts

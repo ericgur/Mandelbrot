@@ -552,8 +552,8 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
                 u = x;
                 v = y;
                 xc = cr;
-                usq = u * u;
-                vsq = v * v;
+                usq = sqr(u);
+                vsq = sqr(v);
                 modulus = usq + vsq;
             } else {
                 u = 0u;
@@ -593,8 +593,8 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
                 // v = 2.0 * (u * v) + y;
                 v = ((u * v) << 1) + yc;
                 u = tmp;
-                usq = u * u;
-                vsq = v * v;
+                usq = sqr(u);
+                vsq = sqr(v);
                 modulus = usq + vsq;
 
                 if (u == uRef && v == vRef) {
@@ -645,8 +645,8 @@ float QMandelbrotWidget::CalcSinglePixelFP128(fp128_t cx, fp128_t cy)
         tmp = usq - vsq + cx;
         v = ((u * v) << 1) + cy;
         u = tmp;
-        usq = u * u;
-        vsq = v * v;
+        usq = sqr(u);
+        vsq = sqr(v);
         modulus = usq + vsq;
 
         if (u == uRef && v == vRef) {
