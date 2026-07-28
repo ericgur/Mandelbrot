@@ -189,6 +189,52 @@ private:
     static constexpr uint64_t max_uint_value = FP128_MAX_VALUE_64(I);    ///< Maximum integer representable value.
     /// @}
 
+    /**
+     * @brief Extracts the mantissa of a floating point representation of this object, rounded.
+     *
+     * Keeps the frac_bits+1 most significant bits of the magnitude and rounds the dropped
+     * remainder to nearest, ties going to even. This is what IEEE 754 mandates and what the
+     * builtin conversions do.<BR>
+     * Rounding needs three pieces of information: the bits that survive, the highest dropped bit
+     * (which chooses the direction) and whether anything below it is set (the sticky bit, which
+     * distinguishes an exact tie from a remainder larger than half). The sign is held separately
+     * from the magnitude, so it plays no part here.
+     *
+     * @param msb Bit position of the most significant set bit. Must be larger than frac_bits.
+     * @param frac_bits Fraction bit count of the target type, 23 for float or 52 for double.
+     * @return The rounded mantissa. Holds frac_bits+1 bits, or frac_bits+2 when rounding carried
+     *         into the next power of 2.
+     */
+    [[nodiscard]] FP128_INLINE uint64_t RoundedMantissa(int32_t msb, int32_t frac_bits) const noexcept
+    {
+        const int32_t shift = msb - frac_bits;  // count of dropped bits, at least 1
+        uint64_t mant = shift_right128(low, high, shift);
+
+        // the highest dropped bit sits just below the mantissa
+        const uint64_t round_bit = (shift <= 64) ? FP128_GET_BIT(low, shift - 1) : FP128_GET_BIT(high, shift - 65);
+        if (round_bit == 0)
+            return mant;  // remainder is below half, round down
+
+        // is anything set below the rounding bit? Each branch below shifts the bits of interest
+        // to the top of the QWORD, which avoids building a mask of a variable width.
+        bool sticky;
+        if (shift < 2) {
+            sticky = false;  // the rounding bit is the only dropped bit
+        } else if (shift <= 64) {
+            sticky = (low << (65 - shift)) != 0;  // bits [shift-2:0] of low
+        } else if (shift == 65) {
+            sticky = low != 0;  // all of low, nothing of high
+        } else {
+            sticky = low != 0 || (high << (129 - shift)) != 0;  // all of low plus bits [shift-66:0] of high
+        }
+
+        // above half always rounds up, an exact tie rounds towards the even mantissa
+        if (sticky || (mant & 1))
+            ++mant;
+
+        return mant;
+    }
+
 public:
     static constexpr uint64_t max_int_value = int_mask >> upper_frac_bits;  ///< Maximum representable integer value.
     typedef fixed_point128<I> type;                                         ///< Self type alias.
@@ -404,14 +450,17 @@ public:
             return;
 
         const auto x_len = 1 + strlen(x);
-        auto str_ptr = std::make_unique_for_overwrite<char[]>(x_len);
+        // make_unique_for_overwrite throws bad_alloc, which this noexcept constructor must not
+        // propagate. The nothrow form reports a failed allocation as a null pointer instead.
+        auto str_ptr = std::unique_ptr<char[]>(new (std::nothrow) char[x_len]);
         char* p = str_ptr.get();
         if (p == nullptr)
             return;
         strnlwr(p, x, x_len);
 
-        // skip white space
-        while (*p == ' ')
+        // skip leading white space. The cast keeps a negative char from reaching isspace, which
+        // only accepts values representable as unsigned char (or EOF).
+        while (*p && isspace(static_cast<unsigned char>(*p)))
             ++p;
 
         if (*p == '\0') {
@@ -441,7 +490,7 @@ public:
         uint32_t digits = 0;
         fixed_point128<1> frac;
         // multiply each digits by 10^-n
-        while (++digits < base10_table_size && isdigit(*p)) {
+        while (++digits < base10_table_size && isdigit(static_cast<unsigned char>(*p))) {
             uint32_t d = static_cast<uint64_t>(p[0] - '0');
             frac += base10_table[digits] * d;
             ++p;
@@ -570,60 +619,68 @@ public:
     {
         if (!*this)
             return 0.0f;
-        constexpr uint64_t f_mask = FP128_MAX_VALUE_64(flt_frac_bits);
+
+        const int32_t msb = 127 - static_cast<int32_t>(lzcnt128(*this));
+        const int32_t expo = msb - F;  // base 2 exponent of the value
+
+        // A float only reaches down to 2^-126 before going denormal. That can only happen for
+        // I == 1, whose smallest value is 2^-127, so route it through double, which has the range
+        // to hold it exactly and converts down to a denormal correctly.
+        if (expo + 127 <= 0)
+            return static_cast<float>(operator double());
 
         Float res;
         res.s = sign;
-        int32_t s = (int32_t)lzcnt128(*this);
-        int32_t msb = 127 - s;
-        auto expo = I - 1 - s;
 
-        res.e = 127u + expo;
-        // get the 23 bits right of the msb.
-        fixed_point128 temp(*this);
-        int shift = msb - flt_frac_bits;
-        if (shift > 0) {
-            res.f = f_mask & shift_right128(temp.low, temp.high, shift);
-        } else {
-            res.f = f_mask & shift_left128(temp.low, temp.high, -shift);
+        // the value fits in the fraction, no bits are lost so no rounding is needed.
+        // float doesn't hold the msb, it's implicit, so bit [22:0] hold the rest of the value
+        if (msb <= flt_frac_bits) {
+            res.e = static_cast<uint32_t>(expo + 127);
+            res.f = static_cast<uint32_t>(low << (flt_frac_bits - msb));
+            return res.val;
         }
-        // round
-        if (res.f == f_mask) {
-            res.f = 0;
-            ++res.e;
-        }
+
+        // more bits than the fraction can hold, drop the extra ones with rounding.
+        // rounding up can carry into the next power of 2, costing a fraction bit and
+        // incrementing the exponent
+        const uint64_t mant = RoundedMantissa(msb, flt_frac_bits);
+        const uint64_t carry = mant >> (flt_frac_bits + 1);
+        res.e = static_cast<uint32_t>(expo + static_cast<int32_t>(carry) + 127);
+        res.f = static_cast<uint32_t>(mant >> carry);
         return res.val;
     }
     /**
      * @brief operator double - converts to a double
-     * @return Object value.
+     * The whole value range is within reach of a double's exponent, so nothing overflows or
+     * goes denormal.
+     * @return Object value, rounded to nearest with ties going to even.
      */
     [[nodiscard]] FP128_INLINE operator double() const noexcept
     {
         if (!*this)
             return 0.0;
-        constexpr uint64_t f_mask = FP128_MAX_VALUE_64(dbl_frac_bits);
+
+        const int32_t msb = 127 - static_cast<int32_t>(lzcnt128(*this));
+        const int32_t expo = msb - F;  // base 2 exponent of the value
+
         Double res;
         res.s = sign;
-        const int32_t s = static_cast<int32_t>(lzcnt128(*this));
-        const int32_t msb = 127 - s;
-        const auto expo = I - 1 - s;
 
-        res.e = 1023ull + expo;
-        // get the 52 bits right of the msb.
-        fixed_point128 temp(*this);
-        const int shift = msb - dbl_frac_bits;
-        if (shift > 0) {
-            res.f = f_mask & shift_right128(temp.low, temp.high, shift);
-        } else {
-            res.f = f_mask & (temp.low << -shift);
-        }
-        // round
-        if (res.f == f_mask) {
-            res.f = 0;
-            ++res.e;
+        // the value fits in the fraction, no bits are lost so no rounding is needed.
+        // double doesn't hold the msb, it's implicit, so bit [51:0] hold the rest of the value
+        if (msb <= dbl_frac_bits) {
+            res.e = static_cast<uint64_t>(expo + 1023);
+            res.f = low << (dbl_frac_bits - msb);
+            return res.val;
         }
 
+        // more bits than the fraction can hold, drop the extra ones with rounding.
+        // rounding up can carry into the next power of 2, costing a fraction bit and
+        // incrementing the exponent
+        const uint64_t mant = RoundedMantissa(msb, dbl_frac_bits);
+        const uint64_t carry = mant >> (dbl_frac_bits + 1);
+        res.e = static_cast<uint64_t>(expo + static_cast<int32_t>(carry) + 1023);
+        res.f = mant >> carry;
         return res.val;
     }
     /**
@@ -652,7 +709,8 @@ public:
             *p++ = '-';
 
         uint64_t integer = FP128_GET_BITS(temp.high, upper_frac_bits, 63);
-        p += snprintf(p, sizeof(str) + p - str, "%llu", integer);
+        // the size argument is what is left of the buffer, not its total size plus the offset
+        p += snprintf(p, sizeof(str) - static_cast<size_t>(p - str), "%llu", integer);
         temp.high &= ~int_mask;  // remove the integer part
         // check if temp has additional digits (not zero)
         if (temp) {
@@ -1065,11 +1123,16 @@ public:
         if (0 == x)
             FP128_FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
         const uint64_t nom[2] = {low, high};
+        // div_64bit shortcuts a numerator that is smaller than the divisor and returns without
+        // writing the quotient at all, so the destination has to start at zero. Otherwise a value
+        // whose raw 128 bit form is below the divisor would be left completely unchanged.
+        low = high = 0;
         // the results is stored in low and high, the function returns non zero if error (divide by zero or overflow)
         if (0 != div_64bit(&low, nullptr, (uint64_t*)nom, x, 2)) {
             *this = 0;
         }
 
+        reset_sign_for_zero();
         return *this;
     }
     /**
@@ -1405,7 +1468,7 @@ private:
     /**
      * @brief Set the sign to 0 when both low and high are zero, i.e. avoid having negative zero value
      */
-    FP128_INLINE void reset_sign_for_zero() { sign &= (0 != low || 0 != high); }
+    FP128_INLINE void reset_sign_for_zero() noexcept { sign &= (0 != low || 0 != high); }
 
     /// @}
 
@@ -1661,6 +1724,8 @@ private:
         res.high += (uint64_t)x.is_positive() << upper_frac_bits;
         res.low = 0;
         res.sign = x.sign;
+        // ceil(-0.5) is zero, and a zero carrying a sign compares unequal to every other zero
+        res.reset_sign_for_zero();
         return res;
     }
     /**
@@ -1668,7 +1733,15 @@ private:
      * @param x Value to truncate
      * @return Integer value, rounded towards zero.
      */
-    [[nodiscard]] friend FP128_INLINE fixed_point128 trunc(const fixed_point128& x) noexcept { return fixed_point128(0, x.high & x.int_mask, x.sign); }
+    [[nodiscard]] friend FP128_INLINE fixed_point128 trunc(const fixed_point128& x) noexcept
+    {
+        // truncating a value below one produces zero, which must not keep the sign of the input.
+        // The comparison operators test the sign field, so a negative zero would compare unequal
+        // to zero and smaller than it.
+        fixed_point128 res(0, x.high & x.int_mask, x.sign);
+        res.reset_sign_for_zero();
+        return res;
+    }
     /**
      * @brief Rounds towards the nearest integer.
      * The halfway value (0.5) is rounded away from zero.
@@ -1681,8 +1754,9 @@ private:
         auto sign = x.sign;
         fixed_point128 res = floor(fabs(x) + fixed_point128::half());
 
-        // restore the sign
+        // restore the sign, unless the result rounded down to zero
         res.sign = sign;
+        res.reset_sign_for_zero();
         return res;
     }
     /**
@@ -1701,6 +1775,7 @@ private:
     {
         fixed_point128 res = x;
         res.sign = y.sign;
+        res.reset_sign_for_zero();
         return res;
     }
     /**
@@ -1725,9 +1800,11 @@ private:
         iptr->high = x.high & x.int_mask;  // lose the fraction
         iptr->low = 0;
         iptr->sign = x.sign;
+        iptr->reset_sign_for_zero();  // |x| < 1 leaves a zero integer part, which must be unsigned
 
         fixed_point128 res = x;
         res.high &= ~x.int_mask;  // lose the integer part
+        res.reset_sign_for_zero();
         return res;
     }
     /**
@@ -1882,6 +1959,11 @@ private:
         static const fixed_point128 xy_min = one - (fixed_point128::epsilon() << 2);
         constexpr int max_iterations = 3;
         constexpr int debug = false;
+        // 1/0 is infinity, which the double constructor saturates to the largest representable
+        // value rather than zero. Catch it here so the documented result actually holds.
+        if (!x)
+            return fixed_point128(0);
+
         fixed_point128 y = 1.0 / static_cast<double>(x);
 
         if (!y)
@@ -2145,6 +2227,7 @@ private:
         }
 
         res.sign = sign;
+        res.reset_sign_for_zero();  // asin(-0) must not produce a signed zero
         return res;
     }
     /**
@@ -2195,6 +2278,11 @@ private:
         for (int i = 0; i < max_iterations; ++i) {
             fixed_point128 cos_xn = cos(res);
             fixed_point128 sin_xn = sin(res);
+            // At the ends of the domain the derivative vanishes: acos(1) starts at res == 0 where
+            // sin is exactly zero. Dividing by it would throw out of this noexcept function, and
+            // there is nothing left to refine anyway.
+            if (!sin_xn)
+                break;
             fixed_point128 e = (x - cos_xn) / sin_xn;
             res -= e;
             if (fabs(e) <= eps)
@@ -2207,7 +2295,8 @@ private:
      * @brief Calculate the tangent function
      * tan(x) = sin(x)/cos(x)
      * @param x value
-     * @return Tangent of x
+     * @return Tangent of x. Zero at the poles (odd multiples of pi/2), where the true value is
+     *         unbounded and the cosine comes out exactly zero.
      */
     [[nodiscard]] friend FP128_INLINE fixed_point128 tan(fixed_point128 x) noexcept requires (I >= 4)
     {
@@ -2219,8 +2308,14 @@ private:
             if (cos_x)
                 return sin_x / cos_x;
             return 0;
-        } else
-            return sin(x) / cos(x);
+        } else {
+            const fixed_point128 cos_x = cos(x);
+            // the range reduction lands exactly on zero at the poles. Dividing by it would throw
+            // out of this noexcept function, so report zero like the CORDIC branch above does.
+            if (!cos_x)
+                return 0;
+            return sin(x) / cos_x;
+        }
     }
     /**
      * @brief Calculate the inverse tangent function
@@ -2266,6 +2361,7 @@ private:
             res = half_pi - res;
         // restore sign if needed
         res.sign = sign;
+        res.reset_sign_for_zero();  // atan(-0) must not produce a signed zero
         return res;
     }
     /**
@@ -2551,6 +2647,11 @@ private:
         if (x.is_negative())
             return 0;
 
+        // log() throws on a zero input and this function is noexcept, so zero has to be handled
+        // here. Follows the CRT: pow(0, 0) is 1 and pow(0, y) is zero for any other y.
+        if (x.is_zero())
+            return (y.is_zero()) ? fixed_point128::one() : fixed_point128(0);
+
         fixed_point128 lan_x = log(x);
         if (!lan_x)
             return lan_x;
@@ -2626,10 +2727,13 @@ private:
     }
     /**
      * @brief Calculates the natural Log (base e) of 1 + x: log(1 + x)
+     * Not noexcept: it forwards to log(), which rejects a non positive argument. Marking it
+     * noexcept would turn that domain_error into a call to std::terminate.
      * @param x The number to perform log on.
      * @return log1p(x)
+     * @throws std::domain_error when x is -1 or below.
      */
-    [[nodiscard]] friend FP128_INLINE fixed_point128 log1p(fixed_point128 x) noexcept { return log(fixed_point128::one() + x); }
+    [[nodiscard]] friend FP128_INLINE fixed_point128 log1p(fixed_point128 x) { return log(fixed_point128::one() + x); }
     /**
      * @brief Calculates Log base 10 of x: log10(x)
      * @param x The number to perform log on.

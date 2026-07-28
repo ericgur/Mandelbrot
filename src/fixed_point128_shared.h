@@ -36,10 +36,15 @@
  * This header is consumed by fixed_point128.h and should not be included directly.
  */
 
+#include <array>
 #include <cstdint>
 #include <cassert>
+#include <cctype>   // tolower, isspace
+#include <cstdio>   // snprintf
+#include <cstring>  // strlen, strncmp
 #include <stdexcept>
 #include <memory>
+#include <string>
 #include <type_traits>
 
 /***********************************************************************************
