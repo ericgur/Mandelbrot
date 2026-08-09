@@ -15,7 +15,7 @@
 #include <QChronoTimer>
 
 // include fixed point implementation from project root
-#include "fixed_point128.h"
+#include "fp128/fixed_point128.h"
 
 /// @brief 128-bit fixed-point type with 8 integer bits and 120 fractional bits.
 typedef fp128::fixed_point128<8> fp128_t;

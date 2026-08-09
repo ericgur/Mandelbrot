@@ -157,8 +157,13 @@
   </ItemDefinitionGroup>
   <ItemGroup>
     <ClInclude Include="ComplexSelectDlg.h" />
-    <ClInclude Include="fixed_point128.h" />
-    <ClInclude Include="fixed_point128_shared.h" />
+    <ClInclude Include="fp128\fixed_point128.h" />
+    <ClInclude Include="fp128\float128.h" />
+    <ClInclude Include="fp128\fp128_decimal.h" />
+    <ClInclude Include="fp128\fp128_shared.h" />
+    <ClInclude Include="fp128\int128_shared.h" />
+    <ClInclude Include="fp128\int128_t.h" />
+    <ClInclude Include="fp128\uint128_t.h" />
     <ClInclude Include="pch.h" />
     <QtMoc Include="QJuliaSetOptions.h" />
     <QtMoc Include="QMandelbrotWidget.h" />
