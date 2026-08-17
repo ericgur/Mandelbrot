@@ -100,6 +100,33 @@ public:
     void saveImage(int width, int height);
 
     /**
+     * @brief Render one frame into the internal image cache without painting to the screen.
+     *
+     * Runs the exact pipeline paintEvent() drives - buffer (re)allocation, the escape-time
+     * calculation at the active precision, palette/histogram rebuild and the iteration-to-RGB
+     * conversion - and stops short of blitting the result to the widget surface. The widget
+     * does not need to be visible, which is what lets the benchmark mode drive it headless.
+     *
+     * The frame is rendered at the widget's current size(), so callers should resize() first.
+     *
+     * @return Wall-clock render time in milliseconds, with sub-millisecond resolution.
+     */
+    [[nodiscard]] double renderOffscreen();
+
+    /**
+     * @brief Point the view at a specific location in the complex plane at a given zoom.
+     *
+     * The default view spans x in [-2.5, 2.5], and each zoom step halves that span, so the
+     * horizontal half-width becomes 2.5 / 2^log2Zoom. Y bounds are derived from the widget
+     * aspect ratio about @p centerY.
+     *
+     * @param centerX Real part of the view center.
+     * @param centerY Imaginary part of the view center.
+     * @param log2Zoom Log2 of the zoom level, clamped to [logMinZoom, logMaxZoom].
+     */
+    void setView(const fp128_t& centerX, const fp128_t& centerY, int32_t log2Zoom);
+
+    /**
      * @brief Get the current Julia set constant.
      * @return The complex constant C used for Julia set rendering.
      */
@@ -227,6 +254,20 @@ private:
      * @return The computed iteration limit.
      */
     int64_t calcAutoIterationLimits();
+
+    /**
+     * @brief Render one frame into _imageCache.
+     *
+     * The shared body of paintEvent() and renderOffscreen(): (re)allocates the image and
+     * iteration buffers when the widget size changed, refreshes the auto-iteration limit,
+     * runs the escape-time calculation at the active precision, rebuilds the palette when
+     * it went stale and converts the iteration buffer to RGB. Nothing here touches the
+     * widget surface, so it is safe to call on a widget that was never shown.
+     *
+     * @return Wall-clock render time in nanoseconds.
+     */
+    [[nodiscard]] int64_t RenderFrame();
+
     inline bool fractalDataValid() const { return _fractalDataValid; }
     inline void setFractalDataValid(bool valid = true) { _fractalDataValid = valid; }
     inline bool colorTableValid() const { return _colorTableValid; }

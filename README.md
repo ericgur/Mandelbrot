@@ -86,6 +86,33 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
   - **Julia Set Options** -- open dialog to select presets or enter custom constants
   - **OpenMP** -- toggle parallel rendering
 
+### Benchmark mode
+
+`--benchmark` renders offscreen instead of opening a window, timing each frame, so rendering
+throughput can be compared across builds -- different compilers, precision modes or iteration
+limits -- on identical input. Every run draws the same deep-zoom view of the seahorse valley,
+so the amount of work per frame depends only on the options below.
+
+```bash
+qMandelbrot --benchmark --precision fp128 --pixel-iteration-limit 2048 --iterations 10 --json
+```
+
+| Option | Description | Default |
+|---|---|---|
+| `--benchmark` | Run the benchmark instead of showing the GUI | off |
+| `--precision <mode>` | `auto`, `double`, `fp128` or `perturbation` | `fp128` |
+| `--pixel-iteration-limit <count>` | Escape-time iteration ceiling per pixel, `0` to scale it with zoom | `2048` |
+| `--iterations <count>` | Number of images to render and time | `10` |
+| `--size <WxH>` | Image size in pixels | `1280x720` |
+| `--zoom <log2>` | Log2 of the zoom level of the benchmark view, 0 to 113 | `40` |
+| `--json [file]` | Also write the results to a JSON file | off, `benchmark.json` when the path is omitted |
+
+Every frame time is reported in milliseconds, followed by their min, max, average and median.
+The JSON report carries the same timings plus the configuration they were measured under,
+including the compiler that built the binary. On Windows the executable links as a GUI
+application, so `--benchmark` attaches to the console it was launched from; redirecting the
+output to a file works as usual.
+
 ## Project Structure
 
 ```
@@ -94,6 +121,7 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
 ├── src/
 │   ├── CMakeLists.txt          # Source-level build config
 │   ├── main.cpp                # Application entry point
+│   ├── Benchmark.h/.cpp        # Command line parsing and headless benchmark mode
 │   ├── pch.h / pch.cpp         # Precompiled header
 │   ├── QtMainWindow.h/.cpp     # Main window (menus, actions, status bar)
 │   ├── QtMainWindow.ui         # Qt Designer UI for main window
@@ -117,7 +145,14 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
 
 ### `main.cpp`
 
-Application entry point. Creates a `QApplication` and shows the `QtMainWindow`.
+Application entry point. Creates a `QApplication`, parses the command line and then either runs
+the headless benchmark or shows the `QtMainWindow`.
+
+### `Benchmark.h` / `Benchmark.cpp`
+
+Command line front end and runner for `--benchmark` mode. Defines the options, drives
+`QMandelbrotWidget::renderOffscreen()` over the configured number of frames, and writes the
+per-frame timings and their statistics to the terminal and optionally to a JSON file.
 
 ### `QtMainWindow` (`QtMainWindow.h` / `QtMainWindow.cpp`)
 

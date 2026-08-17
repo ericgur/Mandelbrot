@@ -35,6 +35,9 @@
     <ClInclude Include="ComplexSelectDlg.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Benchmark.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="fp128\float128.h">
       <Filter>Header Files\fp128</Filter>
     </ClInclude>
@@ -70,15 +73,15 @@
     <ClCompile Include="main.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Benchmark.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
     <ClCompile Include="QJuliaSetOptions.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
-  </ItemGroup>
-  <ItemGroup>
-    <Natvis Include="fixed_point128.natvis" />
   </ItemGroup>
   <ItemGroup>
     <QtMoc Include="QMandelbrotWidget.h">

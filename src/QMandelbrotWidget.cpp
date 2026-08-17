@@ -13,6 +13,7 @@
 #include <QFileDialog>
 #include <QMouseEvent>
 #include <QElapsedTimer>
+#include <algorithm>
 #include <cmath>
 
 using namespace std::chrono_literals;
@@ -524,6 +525,164 @@ void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, i
     }
 }
 
+/**
+ * @struct FP128Orbit
+ * @brief Escape-time state of one pixel for the 128-bit fixed-point renderer.
+ *
+ * usq and vsq never leave an iteration: they are consumed only as their difference (the real
+ * part of Z squared) and their sum (the escape test). The state therefore carries those two
+ * instead, which is four QWORDs across the loop back edge rather than six. Both operations are
+ * exact in fixed point, so the results are bit identical to computing them from usq and vsq.
+ *
+ * The members carry no default initializers on purpose: MakeOrbit() assigns every one of them,
+ * and this type is constructed once per pixel on the hottest path in the renderer.
+ */
+struct FP128Orbit {
+    fp128_t u, v;        ///< Current iterate Z = (u, v).
+    fp128_t diff;        ///< usq - vsq, the real part of Z squared.
+    fp128_t modulus;     ///< usq + vsq, compared against the escape radius.
+    fp128_t uRef, vRef;  ///< Periodicity snapshot of an earlier iterate.
+    int64_t iter;        ///< Iterations performed so far.
+    int64_t period;      ///< Spacing to the next snapshot.
+    int64_t nextSave;    ///< Iteration at which the next snapshot is taken.
+    bool periodic;       ///< True once the orbit was found to repeat.
+};
+
+/// @brief Iterations run between periodicity checks. See RunOrbit() for why this is free to choose.
+static constexpr int64_t fp128PeriodChunk = 16;
+
+/**
+ * @brief Pixels iterated in lockstep by the fixed-point renderer.
+ *
+ * The escape-time recurrence is a serial dependency chain, so a single pixel leaves most of the
+ * machine idle no matter how few registers it needs. Stepping two neighbouring pixels together
+ * gives the out-of-order engine two independent chains to overlap, which is worth ~19% to Clang
+ * on a wide core. MSVC cannot schedule the doubled state and comes out 3-5% behind its own
+ * single-pixel loop, so it keeps that one.
+ */
+static constexpr int fp128OrbitLanes =
+#if defined(__clang__)
+    2;
+#else
+    1;
+#endif
+
+/**
+ * @brief Initialize an orbit for one pixel.
+ * @tparam IsJulia True for Julia, false for Mandelbrot.
+ * @param x Pixel real coordinate.
+ * @param y Pixel imaginary coordinate.
+ * @return The orbit at iteration zero.
+ */
+template<bool IsJulia>
+[[nodiscard]] static FP128_FORCE_INLINE FP128Orbit MakeOrbit(const fp128_t& x, const fp128_t& y)
+{
+    FP128Orbit o;
+    if constexpr (IsJulia) {
+        // Julia starts at Z(0) = (x, y), so the first iteration needs its square already.
+        o.u = x;
+        o.v = y;
+        const fp128_t usq = sqr(o.u);
+        const fp128_t vsq = sqr(o.v);
+        o.diff = usq - vsq;
+        o.modulus = usq + vsq;
+    } else {
+        // Mandelbrot starts at Z(0) = 0, whose square is zero.
+        o.u = 0u;
+        o.v = 0u;
+        o.diff = 0u;
+        o.modulus = 0u;
+    }
+
+    o.uRef = 0u;
+    o.vRef = 0u;
+    o.iter = 0;
+    o.period = 32;
+    o.nextSave = o.period;
+    o.periodic = false;
+
+    return o;
+}
+
+/**
+ * @brief Advance an orbit by one escape-time iteration.
+ *
+ * Z(i) = Z(i-1)^2 + C, with the imaginary part using a left shift for the doubling:
+ * v = (u * v) << 1 instead of v = 2 * u * v.
+ *
+ * @param o Orbit to advance.
+ * @param xc Real part of C.
+ * @param yc Imaginary part of C.
+ */
+static FP128_FORCE_INLINE void StepOrbit(FP128Orbit& o, const fp128_t& xc, const fp128_t& yc)
+{
+    const fp128_t tmp = o.diff + xc;
+    o.v = ((o.u * o.v) << 1) + yc;
+    o.u = tmp;
+    const fp128_t usq = sqr(o.u);
+    const fp128_t vsq = sqr(o.v);
+    o.diff = usq - vsq;
+    o.modulus = usq + vsq;
+}
+
+/**
+ * @brief Consult the periodicity snapshot and refresh it when due.
+ *
+ * Inside-set orbits collapse to an exact cycle in fp128 precision. Snapshots are taken at
+ * exponentially spaced iterations, and an iterate equal to the snapshot means the orbit repeats
+ * forever from there.
+ *
+ * @param o Orbit to test.
+ * @return True when the orbit was found to repeat.
+ */
+static FP128_FORCE_INLINE bool CheckPeriodicity(FP128Orbit& o)
+{
+    if (o.u == o.uRef && o.v == o.vRef) {
+        o.periodic = true;
+        return true;
+    }
+
+    if (o.iter >= o.nextSave) {
+        o.uRef = o.u;
+        o.vRef = o.v;
+        o.period *= 2;
+        o.nextSave = o.iter + o.period;
+    }
+
+    return false;
+}
+
+/**
+ * @brief Run one orbit to escape, to the iteration limit or to a detected cycle.
+ *
+ * The periodicity test is applied every fp128PeriodChunk iterations rather than every one, which
+ * keeps the snapshot out of the innermost loop where it would occupy four of the sixteen general
+ * registers. Detection is delayed by at most one chunk and that costs nothing: finding a cycle
+ * only ever converts "this pixel will reach the iteration limit" into "this pixel reached it",
+ * so a later detection produces the same value, just after a few more iterations.
+ *
+ * @param o Orbit to run.
+ * @param xc Real part of C.
+ * @param yc Imaginary part of C.
+ * @param maxIter Iteration limit.
+ * @param radius_sq Squared escape radius.
+ */
+static FP128_FORCE_INLINE void RunOrbit(FP128Orbit& o, const fp128_t& xc, const fp128_t& yc, int64_t maxIter, const fp128_t& radius_sq)
+{
+    while (!o.periodic && o.iter < maxIter && o.modulus < radius_sq) {
+        const int64_t stop = std::min(o.iter + fp128PeriodChunk, maxIter);
+
+        while (o.iter < stop && o.modulus < radius_sq) {
+            ++o.iter;
+            StepOrbit(o, xc, yc);
+        }
+
+        if (CheckPeriodicity(o)) {
+            break;
+        }
+    }
+}
+
 template<bool IsJulia>
 void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
 {
@@ -543,79 +702,71 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
         const fp128_t yc = IsJulia ? ci : y;
         float* pbuff = pIterations + width * l;
 
-        for (int k = 0; k < width; ++k) {
-            int iter = 0;
-            fp128_t u, v, usq, vsq, modulus, xc, tmp;
-            const fp128_t x = xTable[k];
+        /*
+            Complex iterative equation Z is:
+            Mandebrot: Z(0) = 0, C = (x,y)
+            Julia:     Z(0) = (x,y), C = Constant
 
-            if constexpr (IsJulia) {
-                u = x;
-                v = y;
-                xc = cr;
-                usq = sqr(u);
-                vsq = sqr(v);
-                modulus = usq + vsq;
-            } else {
-                u = 0u;
-                v = 0u;
-                xc = x;
-                usq = 0u;
-                vsq = 0u;
-                modulus = 0u;
-            }
+            Shared:
+                         2
+            Z(i) = Z(i-1) + C
 
-            // Periodicity detection: inside-set orbits collapse to a fixed cycle
-            // in fp128 precision. Snapshot (u, v) at exponentially spaced iters
-            // and bail out as soon as the current iterate matches the snapshot.
-            // Cuts interior-pixel cost dramatically at deep zoom where _maxIter
-            // is large.
-            fp128_t uRef = 0u, vRef = 0u;
-            int period = 32;
-            int nextSave = period;
+            check uv vector amplitude is smaller than 2
+        */
 
-            /*
-                Complex iterative equation Z is:
-                Mandebrot: Z(0) = 0, C = (x,y)
-                Julia:     Z(0) = (x,y), C = Constant
-
-                Shared:
-                             2
-                Z(i) = Z(i-1) + C
-
-                check uv vector amplitude is smaller than 2
-            */
-            while (iter < _maxIter && modulus < radius_sq) {
-                ++iter;
-
-                // real:
-                tmp = usq - vsq + xc;
-                // imaginary:
-                // v = 2.0 * (u * v) + y;
-                v = ((u * v) << 1) + yc;
-                u = tmp;
-                usq = sqr(u);
-                vsq = sqr(v);
-                modulus = usq + vsq;
-
-                if (u == uRef && v == vRef) {
-                    iter = (int)_maxIter;
-                    break;
-                }
-                if (iter == nextSave) {
-                    uRef = u;
-                    vRef = v;
-                    period *= 2;
-                    nextSave = iter + period;
-                }
-            }
-
+        // Write one finished orbit out as a smooth or integer iteration count.
+        // (not named "emit": Qt defines that as a macro for the signal keyword.)
+        const auto writeResult = [&](const FP128Orbit& o) {
+            const int64_t iter = o.periodic ? _maxIter : o.iter;
             if (_smoothLevel && iter < _maxIter) {
                 // modulus is in the range [4,36), create a scale between the 2 values.
-                float mu = (float)(iter + 1) -  (float)sqrt((float(modulus - radius_sq))) / sqrt_32;
+                float mu = (float)(iter + 1) - (float)sqrt((float(o.modulus - radius_sq))) / sqrt_32;
                 *pbuff++ = mu;
             } else {
-                *pbuff++ = (float)std::max(iter, 1);
+                *pbuff++ = (float)std::max<int64_t>(iter, 1);
             }
+        };
+
+        int k = 0;
+
+        if constexpr (fp128OrbitLanes == 2) {
+            // Two pixels in lockstep while both are still running; whichever outlives the other
+            // finishes in the single-pixel loop below.
+            for (; k + 1 < width; k += 2) {
+                const fp128_t xcA = IsJulia ? cr : xTable[k];
+                const fp128_t xcB = IsJulia ? cr : xTable[k + 1];
+                FP128Orbit a = MakeOrbit<IsJulia>(xTable[k], y);
+                FP128Orbit b = MakeOrbit<IsJulia>(xTable[k + 1], y);
+
+                while (a.iter < _maxIter && a.modulus < radius_sq && b.iter < _maxIter && b.modulus < radius_sq) {
+                    const int64_t stop = std::min(a.iter + fp128PeriodChunk, _maxIter);
+
+                    // The two lanes advance together, so one iteration counter serves both.
+                    while (a.iter < stop && a.modulus < radius_sq && b.modulus < radius_sq) {
+                        ++a.iter;
+                        ++b.iter;
+                        StepOrbit(a, xcA, yc);
+                        StepOrbit(b, xcB, yc);
+                    }
+
+                    if (CheckPeriodicity(a) || CheckPeriodicity(b)) {
+                        break;
+                    }
+                }
+
+                RunOrbit(a, xcA, yc, _maxIter, radius_sq);
+                RunOrbit(b, xcB, yc, _maxIter, radius_sq);
+                writeResult(a);
+                writeResult(b);
+            }
+        }
+
+        for (; k < width; ++k) {
+            const fp128_t xc = IsJulia ? cr : xTable[k];
+            FP128Orbit o = MakeOrbit<IsJulia>(xTable[k], y);
+
+            RunOrbit(o, xc, yc, _maxIter, radius_sq);
+            writeResult(o);
         }
     }
 
@@ -812,21 +963,19 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
 }
 
 /**
- * @brief Render the fractal and paint it to the widget surface.
+ * @brief Render one frame into the image cache.
  *
  * Allocates or reallocates the iteration buffer on resize, selects the
- * appropriate precision renderer based on zoom level, converts iteration
- * counts to an RGB image, and emits renderDone with frame statistics.
+ * appropriate precision renderer based on zoom level, and converts iteration
+ * counts to an RGB image. Shared by paintEvent() and renderOffscreen().
  *
- * @param event Paint event (unused).
+ * @return Wall-clock render time in nanoseconds.
  */
-void QMandelbrotWidget::paintEvent(QPaintEvent* event)
+int64_t QMandelbrotWidget::RenderFrame()
 {
-    Q_UNUSED(event);
-    QElapsedTimer paintTimer;
-    paintTimer.start();
+    QElapsedTimer renderTimer;
+    renderTimer.start();
 
-    QPainter p(this);
     if (_imageCache.isNull() || _imageCache.size() != size()) {
         _imageCache = QImage(size(), QImage::Format_RGB32);
         _imageCache.fill(Qt::white);
@@ -876,16 +1025,58 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
     }
 
     CreateDibFromIterations(_imageCache, _iterations, w, h);
+
+    return renderTimer.nsecsElapsed();
+}
+
+/**
+ * @brief Render the fractal and paint it to the widget surface.
+ *
+ * Renders through RenderFrame(), blits the result and emits renderDone with
+ * frame statistics.
+ *
+ * @param event Paint event (unused).
+ */
+void QMandelbrotWidget::paintEvent(QPaintEvent* event)
+{
+    Q_UNUSED(event);
+    QPainter p(this);
+
+    const int64_t elapsedNs = RenderFrame();
     p.drawImage(rect().topLeft(), _imageCache);
 
     // prepare and emit frame stats
     FrameStats stats;
-    qint64 elapsed = paintTimer.elapsed();
-    stats.render_time_ms = static_cast<uint32_t>(elapsed > UINT32_MAX ? UINT32_MAX : elapsed);
+    const int64_t elapsedMs = elapsedNs / 1000000;
+    stats.render_time_ms = static_cast<uint32_t>(elapsedMs > UINT32_MAX ? UINT32_MAX : elapsedMs);
     stats.zoom = static_cast<float>(_zoomLevel);
     stats.size = size();
     stats.max_iterations = _maxIter;
     emit renderDone(stats);
+}
+
+double QMandelbrotWidget::renderOffscreen()
+{
+    return static_cast<double>(RenderFrame()) / 1000000.0;
+}
+
+void QMandelbrotWidget::setView(const fp128_t& centerX, const fp128_t& centerY, int32_t log2Zoom)
+{
+    log2Zoom = std::clamp(log2Zoom, static_cast<int32_t>(logMinZoom), static_cast<int32_t>(logMaxZoom));
+
+    // The default view spans x in [-2.5, 2.5]; every zoom step halves that span.
+    fp128_t halfWidth = 2.5;
+    halfWidth >>= log2Zoom;
+
+    _xmin = centerX - halfWidth;
+    _xmax = centerX + halfWidth;
+    // SetAspectRatio() derives the Y bounds from their midpoint, so collapsing both onto
+    // centerY centers the view vertically on it.
+    _ymin = _ymax = centerY;
+    _zoomLevel = pow(2.0, static_cast<double>(log2Zoom));
+
+    SetAspectRatio();
+    invalidate();
 }
 
 void QMandelbrotWidget::resizeEvent(QResizeEvent* event)

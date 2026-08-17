@@ -71,7 +71,7 @@
  *  @{
  */
 #define FP128_VERSION_MAJOR 0   ///< Breaking changes to the public interface.
-#define FP128_VERSION_MINOR 10  ///< Backwards compatible additions.
+#define FP128_VERSION_MINOR 11  ///< Backwards compatible additions.
 #define FP128_VERSION_PATCH 0   ///< Fixes that change neither.
 #define FP128_VERSION_BUILD 0   ///< Rebuild of an unchanged source tree.
 
@@ -108,6 +108,14 @@
 #define FP128_ARM64
 #endif
 
+// Detect x86-64 under a GCC style frontend. Most of the x86 intrinsics MSVC provides have a
+// __builtin equivalent there, so this is only needed where the operation exists as an instruction
+// but neither as an intrinsic nor as something the compiler will produce on its own - which today
+// means udiv128() and the DIV instruction. MSVC never takes these paths; it has the intrinsic.
+#if defined(FP128_CLANG) && (defined(__x86_64__) || defined(_M_X64))
+#define FP128_X64
+#endif
+
 // Set to TRUE to disable function inlining - useful for profiling a specific function. Default 0
 #ifndef FP128_DISABLE_INLINE
 #define FP128_DISABLE_INLINE 0
@@ -141,10 +149,15 @@
  * forwarded to. Forcing the wrapper open does not force the callee open with it, so the code that
  * does the actual work still gets outlined when the optimizer thinks that is better.
  *
- * The by value shift operators of float128 and fixed_point128 are the exception, and say why at
- * their definitions: what they forward to is large enough that expanding the wrapper crowds out the
- * arithmetic around it. Treat any addition to the forced set the same way - measure it, and record
- * the number if the answer is surprising.
+ * Two places depart from that rule, and both say why at their definitions. The by value shift
+ * operators of float128 and fixed_point128 are forwarders that are nonetheless *not* forced: what
+ * they forward to is large enough that expanding the wrapper crowds out the arithmetic around it.
+ * float128::get_components() and float128::norm_fraction_sticky() go the other way - they have
+ * bodies of their own and are forced anyway, because the callers' exponent arithmetic only folds
+ * once they are open, and Clang would not open them on its own.
+ *
+ * Treat any addition to the forced set the same way - measure it, and record the number if the
+ * answer is surprising.
  */
 #if FP128_DISABLE_INLINE != 0
 #define FP128_INLINE       FP128_NO_INLINE
@@ -498,15 +511,27 @@ FP128_FORCE_INLINE constexpr uint32_t udiv64(uint64_t dividend, uint32_t divisor
 }
 
 /**
- * @brief Portable 128-bit by 64-bit unsigned division (GCC/Clang fallback).
+ * @brief 128-bit by 64-bit unsigned division (GCC/Clang counterpart of the _udiv128 intrinsic).
  *
- * @note AArch64 has no 128/64 bit divide instruction (UDIV is at most 64/64), so there is no
- *       assembly variant of this function. The __uint128_t expression below lowers to a call to
- *       the compiler runtime helper (__udivti3 / __umodti3) which is faster than any short
- *       hand written long division. Callers on ARM64 should prefer the reciprocal based
- *       division path (see FP128_USE_RECIPROCAL_FOR_DIVISION) built on mulx_u64.
+ * @warning The quotient must fit in 64 bits, which means @p hi_dividend must be smaller than
+ *          @p divisor. This is the same precondition the MSVC _udiv128 intrinsic carries, and
+ *          for the same reason: both compile to the x86 DIV instruction, which raises #DE rather
+ *          than truncating. Both callers satisfy it - div_32bit() passes a zero high half, and
+ *          div_64bit() passes the remainder of a previous division by the same divisor.
  *
- * @param hi_dividend Upper 64 bits of the 128-bit dividend.
+ * @note On x86-64 this is one DIV instruction, written as assembly because there is no builtin
+ *       for it and the portable expression below does not produce it: Clang cannot prove the
+ *       quotient fits, so it lowers `__uint128_t / uint64_t` to a __udivti3 call - a full software
+ *       128/128 division. That call cost 2.8x on `uint128_t` division against MSVC, which has the
+ *       intrinsic.
+ *
+ * @note AArch64 has no 128/64 bit divide instruction (UDIV is at most 64/64), so it keeps the
+ *       portable path, where the __uint128_t expression lowers to the compiler runtime helper
+ *       (__udivti3 / __umodti3) - still faster than any short hand written long division. Callers
+ *       on ARM64 should prefer the reciprocal based division path
+ *       (see FP128_USE_RECIPROCAL_FOR_DIVISION) built on mulx_u64.
+ *
+ * @param hi_dividend Upper 64 bits of the 128-bit dividend. Must be smaller than @p divisor.
  * @param lo_dividend Lower 64 bits of the 128-bit dividend.
  * @param divisor 64-bit divisor.
  * @param remainder Pointer to receive the 64-bit remainder (may be nullptr).
@@ -514,6 +539,23 @@ FP128_FORCE_INLINE constexpr uint32_t udiv64(uint64_t dividend, uint32_t divisor
  */
 FP128_FORCE_INLINE constexpr uint64_t udiv128(uint64_t hi_dividend, uint64_t lo_dividend, uint64_t divisor, uint64_t* remainder)
 {
+#if defined(FP128_X64)
+    // Inline assembly is not allowed during constant evaluation, use the portable path instead.
+    if (!std::is_constant_evaluated()) {
+        uint64_t quot = 0, rem = 0;
+        // DIV divides RDX:RAX by its operand, leaving the quotient in RAX and the remainder in
+        // RDX. The divisor is constrained to a register rather than "rm" for two reasons: it
+        // cannot then land in either of those - the two tied operands already hold RAX and RDX,
+        // so the allocator has to pick a third register - and a register operand carries its own
+        // width, which lets the mnemonic go without the "q" suffix and so assemble under either
+        // inline assembly dialect. DIV leaves the flags undefined, hence the "cc" clobber.
+        __asm__("div %[d]" : "=a"(quot), "=d"(rem) : [d] "r"(divisor), "a"(lo_dividend), "d"(hi_dividend) : "cc");
+        if (remainder) {
+            *remainder = rem;
+        }
+        return quot;
+    }
+#endif
     __uint128_t dividend = (static_cast<__uint128_t>(hi_dividend) << 64) | lo_dividend;
     uint64_t quot = static_cast<uint64_t>(dividend / divisor);
     if (remainder) {
@@ -1046,6 +1088,65 @@ FP128_FORCE_INLINE constexpr void shift_right128_inplace_safe(uint64_t& l, uint6
     }
 }
 /**
+ * @brief Arithmetic right shift of a 128 bit two's complement value (inplace) with rounding.
+ *
+ * The signed counterpart of shift_right128_inplace_safe: the vacated top bits are filled with
+ * copies of the sign bit instead of zeros, so the shift divides by a power of two for negative
+ * values as well as positive ones. Rounding is half to even and is applied to the two's complement
+ * bits, which means a tie moves towards the even neighbour rather than away from zero.
+ *
+ * Handles any positive shift value. A shift of 128 or more leaves zero whatever the sign: rounding
+ * to nearest is what this function does, and every value shifted that far is nearer to zero than to
+ * the last place below it.
+ *
+ * @param l Low QWORD
+ * @param h High QWORD, holding the sign in its MSB
+ * @param shift Bits to shift, between 0-inf
+ */
+FP128_FORCE_INLINE constexpr void shift_right128_inplace_safe_signed(uint64_t& l, uint64_t& h, int shift) noexcept
+{
+    FP128_ASSERT(shift >= 0);
+    if (shift == 0)
+        return;
+
+    const int64_t value = static_cast<int64_t>(h);
+    const uint64_t sign_bits = static_cast<uint64_t>(value >> 63);  // all zeros or all ones
+    uint64_t lsb = 0;
+    switch (shift >> 6) {
+    case 0:  // 1-63 bit
+        lsb = (shift == 1) ? (l & 3) << 1 : (l >> (shift - 2)) & 7;
+        l = (l >> shift) | (h << (64 - shift));
+        h = static_cast<uint64_t>(value >> shift);
+        break;
+    case 1:  // 64-127 bit
+        shift -= 64;
+        switch (shift) {
+        case 0:
+            // the last clause is the sticky bit: it distinguishes an exact tie from a remainder
+            // above half, exactly as in the unsigned version
+            lsb = ((h & 1) << 2) | ((l >> 63) << 1) | ((l & 0x7FFFFFFFFFFFFFFFull) != 0 ? 1 : 0);
+            break;
+        case 1:
+            lsb = ((h & 3) << 1) | (l != 0 ? 1 : 0);
+            break;
+        default:
+            lsb = (h >> (shift - 2)) & 7;
+        }
+
+        l = static_cast<uint64_t>(value >> shift);
+        h = sign_bits;
+        break;
+    default:  // >127 bit
+        h = l = 0;
+    }
+
+    // Use rounding half to even, see shift_right128_inplace_safe for what the three bits mean.
+    if (lsb >= 6 || lsb == 3) {
+        ++l;  // low will wrap around to zero if overflowed
+        h += l == 0;
+    }
+}
+/**
  * @brief Left shift a 128 bit integer (inplace).
  * Handles any positive shift value.
  * @param l Low QWORD
@@ -1084,6 +1185,12 @@ template <int shift> [[nodiscard]] FP128_INLINE constexpr uint64_t shift_right12
     if constexpr (shift == 0) {
         return l;
     } else if constexpr (shift < 64) {
+        // Left as the portable spelling on purpose. MSVC does not recognize it as a funnel shift
+        // and expands it into SHR, SHL and OR where SHRD would be one instruction, and forcing
+        // __shiftright128 here is 6% faster on a Golden Cove P-core - but 47% slower on a
+        // Gracemont E-core, where SHRD is microcoded. On a hybrid part the OpenMP render spreads
+        // over both core types, so the E-core penalty swamps the P-core gain and the whole frame
+        // gets slower. Clang matches this pattern into SHRD on its own where it pays.
         return (l >> shift) | (h << (64 - shift));
     } else if constexpr (shift < 128) {
         return h >> (shift - 64);
@@ -1617,16 +1724,27 @@ inline constexpr uint64_t log2_value_table[][2] = {
 };
 
 /**
- * @brief 1/(n*ln2) for n = 1 upwards, already in fixed_point128<1> form; entry [i] holds 1/((i+1)*ln2).
+ * @brief 1/(n*ln2) for n = 1 upwards, as a raw 128 bit value with 127 fraction bits; entry [i] holds
+ *        1/((i+1)*ln2).
  *
- * Stored pre-scaled because the series loop reads one entry per iteration, and shifting a raw
- * fraction into place every time would cost more than the multiply the entry is used for.
+ * Stored pre-scaled because the series loop reads one entry per iteration, and bringing a value
+ * into place from a decimal string every time is out of the question.
  *
  * The division by ln(2) that turns the natural logarithm into a base two one is folded into these
  * constants rather than applied once at the end. That removes a multiply from every call and, more
  * importantly, the rounding that came with it - which mattered for the instantiations whose own
- * precision is close to the 127 bits the series runs at. Entry zero is 1/ln2 = 1.4427, still inside
- * the range of fixed_point128<1>, and the accumulator peaks around 1.47.
+ * precision is close to the 127 bits the series runs at.
+ *
+ * Two readings of the same bits, one per consumer:
+ * <UL>
+ * <LI>float128 takes an entry as a plain 128 bit fraction, which makes it 1/(2n*ln2) - half the
+ *     mathematical value, so that every one of them stays below one. It doubles the series once at
+ *     the end.</LI>
+ * <LI>fixed_point128 takes it as a fixed_point128<1>, whose 126 fraction bits are one short of what
+ *     the entry carries, so it shifts each one down by a bit as it reads it. That gives 1/(n*ln2)
+ *     itself; entry zero is 1.4427 and the accumulator peaks around 1.47, both inside the range of
+ *     that instantiation, which reaches just under 2.</LI>
+ * </UL>
  */
 inline constexpr uint64_t log2_inv_n_table[][2] = {
     {0xB8AA3B295C17F0BBull, 0xBE87FED0691D3E89ull},

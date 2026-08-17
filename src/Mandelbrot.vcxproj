@@ -156,6 +156,7 @@
     </Link>
   </ItemDefinitionGroup>
   <ItemGroup>
+    <ClInclude Include="Benchmark.h" />
     <ClInclude Include="ComplexSelectDlg.h" />
     <ClInclude Include="fp128\fixed_point128.h" />
     <ClInclude Include="fp128\float128.h" />
@@ -176,6 +177,7 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Debug-Clang|x64'">NotUsing</PrecompiledHeader>
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
+    <ClCompile Include="Benchmark.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="QJuliaSetOptions.cpp" />
     <ClCompile Include="QMandelbrotWidget.cpp" />
@@ -187,9 +189,6 @@
   <ItemGroup>
     <QtUic Include="QJuliaSetOptions.ui" />
     <QtUic Include="QtMainWindow.ui" />
-  </ItemGroup>
-  <ItemGroup>
-    <Natvis Include="fixed_point128.natvis" />
   </ItemGroup>
   <ItemGroup>
     <ResourceCompile Include="Mandelbrot.rc" />
