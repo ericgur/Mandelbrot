@@ -104,11 +104,10 @@ class fp128_gtest;  // Google test class
  *
  * The rest cannot be constexpr, for one of two reasons:
  * <UL>
- * <LI>Division and modulo, and sqrt which is built on them. A 128 bit divisor goes through
- *     div_32bit, which needs alloca and a goto, neither of which C++20 permits in a constexpr
- *     function. The paths for a divisor that fits in 64 bit are no better off: they rest on the
- *     _udiv128 intrinsic, and one of them writes both QWORDs through a pointer to the first,
- *     which is out of bounds as far as constant evaluation is concerned.</LI>
+ * <LI>Division and modulo, and sqrt which is built on them. The paths for a divisor that fits in
+ *     64 bit rest on the _udiv128 intrinsic, and one of them writes both QWORDs through a pointer
+ *     to the first, which is out of bounds as far as constant evaluation is concerned. A 128 bit
+ *     divisor goes through div_128bit, which has no such obstacle of its own.</LI>
  * <LI>The string conversions allocate, and log/log10 look their result up in a function local
  *     static table, which a constexpr function may not declare.</LI>
  * </UL>
@@ -873,14 +872,15 @@ public:
 
             // optimization for when dividing by a small (<= 64 bit) integer
             if (rhs.high == 0) {
-                if (div_64bit((uint64_t*)q, nullptr, (uint64_t*)nom, rhs.low, 2)) {
+                if (!div_64bit((uint64_t*)q, nullptr, (uint64_t*)nom, rhs.low, 2)) {
                     FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
                 }
             }
-            // divide by a 128 bit divisor
+            // divide by a 128 bit divisor. The quotient of two 128 bit values with a divisor this
+            // large fits in a single QWORD, so div_128bit fills q[0] and leaves q[1] at zero.
             else {
                 const uint64_t denom[2] = {rhs.low, rhs.high};
-                if (div_32bit((uint32_t*)q, nullptr, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
+                if (!div_128bit(q, nullptr, nom, denom, array_length(nom))) {
                     FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
                 }
             }
@@ -960,7 +960,7 @@ public:
             // Every early return in div_64bit() that leaves the quotient unwritten is unreachable
             // from here: a numerator below or equal to the divisor is what the two trivial cases
             // above already returned for, and a zero numerator is the `is_zero()` check.
-            if (div_64bit(&low, nullptr, &low, uval, 2)) {
+            if (!div_64bit(&low, nullptr, &low, uval, 2)) {
                 FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
             }
             return *this;
@@ -1003,17 +1003,16 @@ public:
 
             // optimization for when dividing by a small integer
             if (rhs.high == 0) {
-                if (div_64bit((uint64_t*)q, &low, (uint64_t*)nom, rhs.low, 2)) {
+                if (!div_64bit((uint64_t*)q, &low, (uint64_t*)nom, rhs.low, 2)) {
                     FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
                 }
                 high = 0;
             } else {
                 const uint64_t denom[2] = {rhs.low, rhs.high};
-                // div_32bit shrinks the denominator past its leading zero words and fills only that
-                // many words of the remainder. Collect the result in a zeroed buffer so the words it
-                // leaves untouched read as zero instead of retaining the numerator's bits.
+                // Written into a separate buffer rather than into low and high directly: the
+                // numerator is still being read out of them while the division runs.
                 uint64_t r[2] {};
-                if (div_32bit((uint32_t*)q, (uint32_t*)r, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
+                if (!div_128bit(q, r, nom, denom, array_length(nom))) {
                     FP128_INT_DIVIDE_BY_ZERO_EXCEPTION;
                 }
                 low = r[0];

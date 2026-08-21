@@ -24,8 +24,9 @@
 
 /***********************************************************************************
                                 Acknologements
-    The function div_32bit is derived from the book "Hacker's Delight" 2nd Edition
-    by Henry S. Warren Jr. It was converted to 32 bit operations + a bugfix.
+    The function div_128bit is derived from the book "Hacker's Delight" 2nd Edition
+    by Henry S. Warren Jr. It implements Knuth's "Algorithm D", specialized to a 128 bit
+    divisor and written in 64 bit limbs.
 
     The functions log, log2, log10 are derived from Dan Moulding's code:
     https://github.com/dmoulding/log2fix
@@ -211,8 +212,9 @@ template <int32_t I> void fact_reciprocal(int x, fixed_point128<I>& res) noexcep
  *
  * The rest cannot be constexpr, for one of two reasons:
  * <UL>
- * <LI>Division and modulo: div_32bit needs alloca and a goto, neither of which C++20 permits in
- *     a constexpr function, and div_64bit rests on the _udiv128 intrinsic.</LI>
+ * <LI>Division and modulo: div_64bit rests on the _udiv128 intrinsic. div_128bit does not, and
+ *     nothing in it is barred from a constant expression, but the function that calls it is still
+ *     bound by the rest of this list.</LI>
  * <LI>Function local statics, which a constexpr function may not declare. The transcendental
  *     constants (pi, e, sqrt_2, ...) and the factorial reciprocal table are parsed from strings
  *     into them, and reciprocal holds its bounds the same way. sqrt is doubly out, it calls the
@@ -1224,7 +1226,7 @@ public:
             const uint64_t nom[2] = {low, high};
             const uint64_t denom = denom_high >> upper_frac_bits;
             uint64_t r;
-            if (0 == div_64bit((uint64_t*)q, &r, (uint64_t*)nom, denom, 2)) {
+            if (div_64bit((uint64_t*)q, &r, (uint64_t*)nom, denom, 2)) {
                 need_rounding = r > (denom >> 1);
                 high = q[1];
                 low = q[0];
@@ -1330,8 +1332,8 @@ public:
         // writing the quotient at all, so the destination has to start at zero. Otherwise a value
         // whose raw 128 bit form is below the divisor would be left completely unchanged.
         low = high = 0;
-        // the results is stored in low and high, the function returns non zero if error (divide by zero or overflow)
-        if (0 != div_64bit(&low, nullptr, (uint64_t*)nom, x, 2)) {
+        // the results is stored in low and high, the function fails on a divide by zero or overflow
+        if (!div_64bit(&low, nullptr, (uint64_t*)nom, x, 2)) {
             low = high = 0;
         } else {
             NegateIf(sign_bits);
@@ -1836,7 +1838,11 @@ private:
         const uint64_t nom[4] = {0, 0, low, high};
         const uint64_t denom[2] = {denom_low, denom_high};
 
-        if (0 != div_32bit((uint32_t*)q, nullptr, (uint32_t*)nom, (uint32_t*)denom, 2ll * array_length(nom), 2ll * array_length(denom))) {
+        // A divisor small enough to fit in one QWORD is div_64bit's job; div_128bit rejects it
+        // rather than handle a case that has a cheaper route. Both fill the same first words of q.
+        const bool ok = (denom_high != 0) ? div_128bit(q, nullptr, nom, denom, array_length(nom))
+                                          : div_64bit(q, nullptr, nom, denom_low, array_length(nom));
+        if (!ok) {
             FP128_FLOAT_DIVIDE_BY_ZERO_EXCEPTION;
         }
 
@@ -2387,8 +2393,11 @@ private:
         //                  X
         //   Xn+1 = 0.5 * (---- + Xn )
         //                  Xn
+        // Dividing beats multiplying by a reciprocal here, and did not before div_128bit: the
+        // reciprocal is a Newton loop of its own, so the old spelling ran an inner iteration per
+        // outer one. float128::sqrt() has always been written this way.
         for (auto i = iterations; i != 0; --i) {
-            root = (norm_x * reciprocal(root) + root) >> 1;
+            root = (norm_x / root + root) >> 1;
         }
 
         if (expo & 1) {
@@ -2902,10 +2911,10 @@ private:
         const bool negative = x.is_negative();
         x = fabs(x);
 
-        // limit argument to 0..1
+        // limit argument to 0..1. x is greater than one here, so the division cannot be by zero.
         if (x > 1) {
             comp = true;
-            x = reciprocal(x);
+            x = one() / x;
         }
 
         // initial step uses the CRT function.
@@ -3179,7 +3188,12 @@ private:
             res = exp_ix;
         }
 
-        return (x.is_positive()) ? res : reciprocal(res);
+        // A negative exponent inverts the result. The zero is guarded rather than divided: this type
+        // has no infinity, so reciprocal() answers zero there and operator/= throws instead.
+        if (x.is_positive() || !res)
+            return res;
+
+        return one() / res;
     }
     /**
      * @brief Calculates the exponent of x and reduces 1 from the result: (e^x) - 1
