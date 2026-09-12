@@ -13,3 +13,4 @@ bin/
 .claude/settings*.json
 .claude/*.ps1
 .mcp.json
+settings.VisualStudio.json
