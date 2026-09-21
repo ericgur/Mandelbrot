@@ -9,3 +9,8 @@ bak/
 build/
 bin/
 .cache/
+# VS claude code extensions
+.claude/settings*.json
+.claude/*.ps1
+.mcp.json
+settings.VisualStudio.json
