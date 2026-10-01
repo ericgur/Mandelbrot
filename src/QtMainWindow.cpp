@@ -7,17 +7,58 @@
  */
 
 #include "pch.h"
+#include <algorithm>
 #include <cmath>
 #include <QKeyEvent>
 #include <QActionGroup>
+#include <QBoxLayout>
+#include <QLabel>
+#include <QSignalBlocker>
+#include <QSlider>
 #include "QtMainWindow.h"
 #include "QMandelbrotWidget.h"
+
+namespace
+{
+
+constexpr int64_t sliderMinIterations = 64;                                 ///< Iteration limit at the bottom of the slider.
+constexpr int64_t sliderMaxIterations = QMandelbrotWidget::max_iterations;  ///< Iteration limit at the top of the slider.
+constexpr int sliderSteps = 1000;                                           ///< Slider positions above 0; each step is ~0.37% on the log scale.
+constexpr int sliderSingleStep = 5;                                         ///< Wheel step in positions (~1.9%); Qt scrolls wheelScrollLines() steps per notch.
+constexpr int sliderPageStep = 50;                                          ///< Page step for groove clicks and Ctrl/Shift+wheel (~20%).
+
+/**
+ * @brief Map a slider position to an iteration limit on a logarithmic scale.
+ * @param position Slider position in [0, sliderSteps].
+ * @return Iteration limit in [sliderMinIterations, sliderMaxIterations].
+ */
+[[nodiscard]] int64_t SliderPosToIterations(int position)
+{
+    const double ratio = static_cast<double>(sliderMaxIterations) / sliderMinIterations;
+    const double iterations = sliderMinIterations * std::pow(ratio, static_cast<double>(position) / sliderSteps);
+    return std::clamp<int64_t>(std::llround(iterations), sliderMinIterations, sliderMaxIterations);
+}
+
+/**
+ * @brief Map an iteration limit to the nearest slider position; the inverse of SliderPosToIterations().
+ * @param iterations Iteration limit; values outside the slider range are clamped.
+ * @return Slider position in [0, sliderSteps].
+ */
+[[nodiscard]] int IterationsToSliderPos(int64_t iterations)
+{
+    iterations = std::clamp(iterations, sliderMinIterations, sliderMaxIterations);
+    const double ratio = static_cast<double>(sliderMaxIterations) / sliderMinIterations;
+    const double t = std::log(static_cast<double>(iterations) / sliderMinIterations) / std::log(ratio);
+    return static_cast<int>(std::lround(t * sliderSteps));
+}
+
+}  // namespace
 
 QtMainWindow::QtMainWindow(QWidget* parent) : QMainWindow(parent), m_centralWidget(new QMandelbrotWidget(this))
 {
     ui.setupUi(this);
     setWindowTitle("Mandelbrot (Qt6)");
-    setCentralWidget(m_centralWidget);
+    CreateIterationsPanel();
     juliaOptionsDialog = new QJuliaSetOptions(this);
     createActions();
 
@@ -113,6 +154,94 @@ void QtMainWindow::createActions()
 }
 
 /**
+ * @brief Build the iterations slider panel and lay it out left of the fractal widget.
+ *
+ * The slider spans [0, sliderSteps] and maps to [sliderMinIterations, sliderMaxIterations]
+ * on a log scale. Tracking is off, so a drag renders once on release while the label follows
+ * the handle; wheel steps and groove clicks still apply immediately.
+ */
+void QtMainWindow::CreateIterationsPanel()
+{
+    _iterSlider = new QSlider(Qt::Vertical);
+    _iterSlider->setRange(0, sliderSteps);
+    _iterSlider->setSingleStep(sliderSingleStep);
+    _iterSlider->setPageStep(sliderPageStep);
+    _iterSlider->setTracking(false);
+    // the main window handles the arrow and +/- keys for navigation, so the slider must not take focus
+    _iterSlider->setFocusPolicy(Qt::NoFocus);
+    _iterSlider->setToolTip("Iteration limit (logarithmic scale)");
+    _iterSlider->setValue(IterationsToSliderPos(QMandelbrotWidget::min_iterations));
+
+    _iterLabel = new QLabel;
+    _iterLabel->setAlignment(Qt::AlignCenter);
+    _iterLabel->setToolTip("Approximate iteration limit; the status bar shows the exact value");
+    // size for the widest value so the panel, and with it the fractal, never resizes as the text changes
+    _iterLabel->setFixedWidth(_iterLabel->fontMetrics().horizontalAdvance(QString::number(sliderMaxIterations)) + 8);
+    UpdateIterationsLabel(_iterSlider->value());
+
+    QVBoxLayout* panelLayout = new QVBoxLayout;
+    panelLayout->setContentsMargins(4, 4, 4, 4);
+    panelLayout->addWidget(_iterLabel);
+    panelLayout->addWidget(_iterSlider, 1, Qt::AlignHCenter);
+
+    QWidget* container = new QWidget(this);
+    QHBoxLayout* containerLayout = new QHBoxLayout(container);
+    containerLayout->setContentsMargins(0, 0, 0, 0);
+    containerLayout->setSpacing(0);
+    containerLayout->addLayout(panelLayout);
+    containerLayout->addWidget(m_centralWidget, 1);
+    setCentralWidget(container);
+
+    connect(_iterSlider, &QSlider::sliderMoved, this, &QtMainWindow::UpdateIterationsLabel);
+    connect(_iterSlider, &QSlider::valueChanged, this, &QtMainWindow::OnIterationsSliderChanged);
+}
+
+/**
+ * @brief Apply an iteration limit picked with the slider.
+ *
+ * Only user input reaches here; programmatic moves go through SyncIterationsSlider(),
+ * which blocks signals.
+ *
+ * @param position Slider position in [0, sliderSteps].
+ */
+void QtMainWindow::OnIterationsSliderChanged(int position)
+{
+    UpdateIterationsLabel(position);
+
+    // the slider is in control now, so no menu item (Auto included) stays checked
+    if (QAction* act = iterGroup->checkedAction()) {
+        act->setChecked(false);
+    }
+
+    m_centralWidget->setMaximumIterations(SliderPosToIterations(position));
+}
+
+/**
+ * @brief Move the slider to the position nearest an iteration limit without applying it.
+ * @param iterations Iteration limit to show.
+ */
+void QtMainWindow::SyncIterationsSlider(int64_t iterations)
+{
+    // don't pull the handle away from the user mid-drag
+    if (_iterSlider->isSliderDown()) {
+        return;
+    }
+
+    const QSignalBlocker blocker(_iterSlider);
+    _iterSlider->setValue(IterationsToSliderPos(iterations));
+    UpdateIterationsLabel(_iterSlider->value());
+}
+
+/**
+ * @brief Show the iteration limit at a slider position in the slider label.
+ * @param position Slider position in [0, sliderSteps].
+ */
+void QtMainWindow::UpdateIterationsLabel(int position)
+{
+    _iterLabel->setText(QString::number(SliderPosToIterations(position)));
+}
+
+/**
  * @brief Save the current fractal as a PNG image.
  *
  * Determines the target resolution from the triggering action and
@@ -156,8 +285,9 @@ void QtMainWindow::onActionPrecision()
 /**
  * @brief Parse the selected iteration action and forward to the widget.
  *
- * If the action text parses as an integer, that value is used directly.
- * Otherwise, automatic iteration scaling is enabled (maxIter = 0).
+ * If the action text parses as an integer, that value is used directly and the
+ * slider moves to match. Otherwise, automatic iteration scaling is enabled
+ * (maxIter = 0) and the slider follows the computed limit from onRenderDone().
  */
 void QtMainWindow::onActionIterations()
 {
@@ -169,6 +299,7 @@ void QtMainWindow::onActionIterations()
     int iter = act->text().toInt(&ok);
     if (ok) {
         m_centralWidget->setMaximumIterations(iter);
+        SyncIterationsSlider(iter);
     } else {
         // auto
         m_centralWidget->setMaximumIterations(0);
@@ -204,12 +335,18 @@ void QtMainWindow::onActionJuliaOptions()
  * @brief Format and display render statistics in the status bar.
  *
  * For zoom levels above 2^16, the zoom is displayed in power-of-two notation
- * (e.g. "2^42"). Otherwise, a decimal value is shown.
+ * (e.g. "2^42"). Otherwise, a decimal value is shown. While Auto iterations is
+ * active, the slider also moves to the limit used for this frame.
  *
  * @param stats Frame statistics containing render time, zoom, size, and iterations.
  */
 void QtMainWindow::onRenderDone(FrameStats stats)
 {
+    // in Auto mode the slider follows the limit derived from the zoom level
+    if (ui.actionIterAuto->isChecked()) {
+        SyncIterationsSlider(stats.max_iterations);
+    }
+
     // if zoom is > 65536, show as power of 2
     QString zoomStr;
     const double threshold = std::pow(2.0, 16);
