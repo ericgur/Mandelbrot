@@ -65,7 +65,9 @@ namespace
 
 const QRegularExpression& CoordinateRegularExpression()
 {
-    static const QRegularExpression pattern(uR"([+-]?(\d{1,2}(\.\d*)?|\.\d+))"_s);
+    // 0 and 1 take any fraction, 2 only zeros; the bound is QMandelbrotWidget::maxCenterMagnitude
+    static_assert(QMandelbrotWidget::maxCenterMagnitude == 2, "update the pattern to the new bound");
+    static const QRegularExpression pattern(uR"([+-]?([01](\.\d*)?|2(\.0*)?|\.\d+))"_s);
     return pattern;
 }
 

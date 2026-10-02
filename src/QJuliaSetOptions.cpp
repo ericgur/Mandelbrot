@@ -30,7 +30,7 @@ QJuliaSetOptions::QJuliaSetOptions(QWidget* parent) : QDialog(parent), c(QMandel
 {
     ui.setupUi(this);
 
-    // a regular expression rather than QDoubleValidator: it takes all 36 decimals, and keeps
+    // a regular expression rather than QDoubleValidator: it takes all 37 decimals, and keeps
     // the '.' decimal point that ParseJuliaComponent() expects whatever the system locale
     auto* validator = new QRegularExpressionValidator(JuliaComponentRegularExpression(), this);
     ui.real->setValidator(validator);

@@ -53,7 +53,9 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 ### Dual-Precision Strategy (`QMandelbrotWidget`)
 
 - `CalcIterationsDouble()` — IEEE 754 `double`, up to zoom ~2⁴⁴
-- `CalcIterationsFP128()` — custom `fixed_point128<8>` (8 int bits, 120 fractional bits), up to zoom ~2¹¹³
+- `CalcIterationsFP128()` — custom `fixed_point128<fp128IntBits>`, currently 3 integer bits + sign + 124 fraction bits, up to zoom 2^`logMaxZoom` (`F - 10` = 2¹¹⁴, where pixels of a 3840 wide image are still 1 LSB apart)
+- **Fewer integer bits = deeper zoom.** `fp128IntBits = 3` holds [-8, 8): view center clamped to ±`maxCenterMagnitude` (2), pixel offsets to ±5, iterates stay below 6.83. The escaping modulus (up to 46.6) wraps, so the escape test `Bounded()` also checks |u|, |v| < 2, as one OR of high QWORDs (measured free; four signed compares cost 7.5%)
+- Pixel coordinates come from `PixelCoordinate()`: center + halfWidth * (2i - count) / width, with the ratio divided exactly in fp128, so each is good to a few LSBs. Never step from the edge by a rounded `dx` (its error times the pixel index wrecks images past 2^100), and don't form the ratio in `double` (off by 2^-53 of the half width, which flips the counts of chaotic boundary pixels)
 - Auto mode switches precision when zoom exceeds 2⁴⁴
 
 ### Key Classes
@@ -73,7 +75,8 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 
 - **OpenMP parallelization:** `#pragma omp parallel for schedule(dynamic)` per scanline
 - **Color palettes:** Grey, Gradient, Vivid, Histogram-equalized
-- **Auto-iterations:** Scales iteration limit with `log2(zoom)` from 128 (1x) to 2500 (2¹¹³)
+- **View:** `_centerX`, `_centerY` and the zoom level are the whole view state. Zoom is always a power of 2, held as one `int32_t _logZoomLevel` clamped to [`logMinZoom`, `logMaxZoom`]; `ViewHalfWidth()` is `2.5 >> level`, exact in fp128, and the vertical extent follows from the image aspect ratio. A zoom the clamp turns into no change leaves the view untouched
+- **Auto-iterations:** Scales iteration limit with `log2(zoom)` from 128 (1x) to 2500 (2^`logMaxZoom`)
 - **Color animation:** `QChronoTimer` drives palette cycling
 - **Lazy redraw:** `_fractalDataValid` and `_colorTableValid` flags gate recomputation of iteration data and color LUT independently. `invalidate(false)` leaves the color table flag alone; only the color table builders may mark it valid, or a stale table is read past its end after a limit change
 - **Mouse:** Left click = zoom 2x in; Right click = zoom 2x out; Middle = reset. Ctrl multiplies by 2x, Ctrl+Shift by 4x

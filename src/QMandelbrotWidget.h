@@ -16,8 +16,20 @@
 // include fixed point implementation from project root
 #include "fp128/fixed_point128.h"
 
-/// @brief 128-bit fixed-point type with 8 integer bits and 120 fractional bits.
-typedef fp128::fixed_point128<8> fp128_t;
+/**
+ * @brief Integer bits of fp128_t, not counting the sign.
+ *
+ * Every bit taken from the integer part goes to the fraction and buys one more zoom level, so
+ * this is as small as the values the renderer holds allow: 3 bits hold [-8, 8). The iterate
+ * after a step stays within 4 + 2.83 of the origin and pixel coordinates within 7, both of which
+ * fit. The squared modulus of the iterate that escapes, up to 46.6, does not; the escape test in
+ * QMandelbrotWidget.cpp is written to stay exact when it wraps. Any value in [3, 63] renders
+ * correctly, each one level shallower than the one below it.
+ */
+inline constexpr int32_t fp128IntBits = 3;
+
+/// @brief 128-bit fixed-point type with fp128IntBits integer bits, a sign bit and 127 - fp128IntBits fraction bits.
+typedef fp128::fixed_point128<fp128IntBits> fp128_t;
 
 /**
  * @struct Complex128
@@ -44,7 +56,7 @@ struct Complex128 {
  */
 struct FrameStats {
     uint32_t render_time_ms {};  ///< Wall-clock render time in milliseconds.
-    float zoom {};               ///< Current zoom level multiplier.
+    int32_t log2Zoom {};         ///< Zoom level as a power of 2.
     QSize size {};               ///< Rendered image dimensions in pixels.
     int32_t max_iterations {};   ///< Maximum iteration count used for this frame.
 };
@@ -56,7 +68,7 @@ struct FrameStats {
  * This is the core rendering engine of the application. It computes
  * the escape-time algorithm per-pixel, supports dual-precision rendering
  * (double-precision IEEE 754 up to zoom 2^44, then 128-bit fixed-point
- * for deeper zooms up to 2^113), and provides four color palette modes
+ * for deeper zooms up to 2^logMaxZoom), and provides four color palette modes
  * (grey, gradient, vivid, histogram-equalized) with optional animation.
  *
  * Rendering is parallelized across scanlines using OpenMP with dynamic
@@ -75,8 +87,13 @@ class QMandelbrotWidget : public QWidget
 public:
     static inline constexpr int64_t max_iterations = 2500;  ///< Upper bound for iteration count.
     static inline constexpr int64_t min_iterations = 128;   ///< Lower bound for iteration count.
-    static inline constexpr double logMaxZoom = 113.0;      ///< Log2 of maximum zoom (128-bit fixed-point limit).
-    static inline constexpr double logMinZoom = 0.0;        ///< Log2 of minimum zoom (x1).
+    /// Log2 of maximum zoom: the deepest level at which neighboring pixels of a 3840 pixel wide image
+    /// are still at least one fp128_t LSB apart (114 with 3 integer bits).
+    static inline constexpr int32_t logMaxZoom = fp128_t::F - 10;
+    static inline constexpr int32_t logMinZoom = 0;         ///< Log2 of minimum zoom (x1).
+    /// Largest magnitude of either part of the view center. The Mandelbrot set lies within 2 of
+    /// the origin, and so does every Julia set that is more than dust, so nothing past it is lost.
+    static inline constexpr int32_t maxCenterMagnitude = 2;
     /// setMaximumIterations() value that turns on Auto, which scales the iteration limit with the zoom.
     static inline constexpr int64_t auto_iterations = 0;
     /// Lowest fixed iteration limit the UI offers; max_iterations is the highest.
@@ -139,11 +156,11 @@ public:
      * @brief Point the view at a specific location in the complex plane at a given zoom.
      *
      * The default view spans x in [-2.5, 2.5], and each zoom step halves that span, so the
-     * horizontal half-width becomes 2.5 / 2^log2Zoom. Y bounds are derived from the widget
-     * aspect ratio about @p centerY.
+     * horizontal half-width becomes 2.5 / 2^log2Zoom. The vertical extent follows from the
+     * widget aspect ratio about @p centerY.
      *
-     * @param centerX Real part of the view center.
-     * @param centerY Imaginary part of the view center.
+     * @param centerX Real part of the view center, clamped to [-maxCenterMagnitude, maxCenterMagnitude].
+     * @param centerY Imaginary part of the view center, clamped the same way.
      * @param log2Zoom Log2 of the zoom level, clamped to [logMinZoom, logMaxZoom].
      */
     void setView(const fp128_t& centerX, const fp128_t& centerY, int32_t log2Zoom);
@@ -162,21 +179,21 @@ public:
 
     /**
      * @brief Get the real part of the view center.
-     * @return Midpoint of the view's X bounds in the complex plane, at full fp128 precision.
+     * @return The view center's real part, at full fp128 precision.
      */
-    [[nodiscard]] fp128_t viewCenterX() const { return (_xmin + _xmax) >> 1; }
+    [[nodiscard]] fp128_t viewCenterX() const { return _centerX; }
 
     /**
      * @brief Get the imaginary part of the view center.
-     * @return Midpoint of the view's Y bounds in the complex plane, at full fp128 precision.
+     * @return The view center's imaginary part, at full fp128 precision.
      */
-    [[nodiscard]] fp128_t viewCenterY() const { return (_ymin + _ymax) >> 1; }
+    [[nodiscard]] fp128_t viewCenterY() const { return _centerY; }
 
     /**
      * @brief Get the zoom level as a power of 2, in the form setView() takes it.
      * @return Log2 of the zoom level, in [logMinZoom, logMaxZoom].
      */
-    [[nodiscard]] int32_t log2Zoom() const;
+    [[nodiscard]] int32_t log2Zoom() const { return _logZoomLevel; }
 
     /**
      * @brief Get the fractal set being rendered.
@@ -198,7 +215,7 @@ public:
      * @param log2Zoom Log2 of the zoom level; values below 0 count as 0.
      * @return The iteration limit.
      */
-    [[nodiscard]] static int64_t autoIterationLimit(double log2Zoom);
+    [[nodiscard]] static int64_t autoIterationLimit(int32_t log2Zoom);
 
     /**
      * @brief Switch between Mandelbrot and Julia set rendering.
@@ -328,7 +345,7 @@ private:
      * @brief Compute iteration limits based on the current zoom level.
      *
      * Linearly interpolates between min_iterations (at zoom 1) and
-     * max_iterations (at zoom 2^113).
+     * max_iterations (at zoom 2^logMaxZoom).
      *
      * @return The computed iteration limit.
      */
@@ -353,9 +370,8 @@ private:
     inline void setColorTableValid(bool valid = true) { _colorTableValid = valid; }
 
     // View state
-    fp128_t _xmin, _xmax, _ymin, _ymax;  ///< View bounds in the complex plane.
-    double _zoomLevel;                      ///< Current zoom multiplier (1.0 = default).
-    double _zoomIncrement = 2.0;            ///< Zoom step factor per click.
+    fp128_t _centerX, _centerY;             ///< View center in the complex plane, each part in [-maxCenterMagnitude, maxCenterMagnitude].
+    int32_t _logZoomLevel = 0;              ///< Zoom level as a power of 2, in [logMinZoom, logMaxZoom]; 0 = default.
     int64_t _maxIter = 128;                 ///< Current maximum iteration count.
     bool _autoIterations = false;           ///< True if iterations scale with zoom.
 
@@ -391,15 +407,41 @@ private:
     /** @brief Initialize view bounds to the default complex plane region. */
     void SetDefaultValues();
 
-    /** @brief Adjust Y bounds to maintain the correct aspect ratio. */
-    void SetAspectRatio();
+    /**
+     * @brief Move the view center, keeping each part within maxCenterMagnitude.
+     * @param centerX Real part of the view center.
+     * @param centerY Imaginary part of the view center.
+     */
+    void SetViewCenter(const fp128_t& centerX, const fp128_t& centerY);
 
     /**
-     * @brief Zoom the view centered on a screen point.
-     * @param point Screen coordinates of the zoom center.
-     * @param zoomMultiplier Zoom factor (>1 to zoom in, <1 to zoom out).
+     * @brief Get half the width of the view in the complex plane.
+     * @return 2.5 / 2^_logZoomLevel, exact at every zoom level.
      */
-    void OnZoomChange(const QPoint& point, double zoomMultiplier);
+    [[nodiscard]] fp128_t ViewHalfWidth() const;
+
+    /**
+     * @brief Run the escape-time calculation for the current view at the active precision.
+     *
+     * The view keeps its center and horizontal span at any image size; the vertical span
+     * follows from the image's aspect ratio.
+     *
+     * @param pIterations Output buffer for per-pixel iteration counts.
+     * @param width Image width in pixels.
+     * @param height Image height in pixels.
+     */
+    void CalcIterations(float* pIterations, int64_t width, int64_t height);
+
+    /**
+     * @brief Zoom by a power of 2 and center the view on a screen point.
+     *
+     * The new zoom level is clamped to [logMinZoom, logMaxZoom]; when the clamp leaves it
+     * unchanged, the view is left as it is.
+     *
+     * @param point Screen coordinates of the new view center.
+     * @param logZoomDelta Zoom steps of 2x each (positive to zoom in, negative to zoom out).
+     */
+    void OnZoomChange(const QPoint& point, int32_t logZoomDelta);
 
     // Rendering helpers
 
@@ -454,12 +496,11 @@ private:
      * @param pIterations Output buffer for per-pixel iteration counts.
      * @param width Image width in pixels.
      * @param height Image height in pixels.
-     * @param x0 Left edge of the view in the complex plane.
-     * @param dx Horizontal step per pixel.
-     * @param y0 Top edge of the view in the complex plane.
-     * @param dy Vertical step per pixel.
+     * @param centerX Real part of the view center.
+     * @param centerY Imaginary part of the view center.
+     * @param halfWidth Half the view width in the complex plane.
      */
-    void CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+    void CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, const fp128_t& centerX, const fp128_t& centerY, const fp128_t& halfWidth);
 
     /**
      * @brief Templated double-precision render specialized on set type.
@@ -473,7 +514,7 @@ private:
      * @tparam IsJulia True for Julia, false for Mandelbrot.
      */
     template<bool IsJulia>
-    void CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+    void CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, const fp128_t& centerX, const fp128_t& centerY, const fp128_t& halfWidth);
 
     /**
      * @brief Render the Mandelbrot set using perturbation theory.
@@ -489,12 +530,12 @@ private:
      * @param pIterations Output buffer for per-pixel iteration counts.
      * @param width Image width in pixels.
      * @param height Image height in pixels.
-     * @param x0 Left edge of the view in the complex plane.
-     * @param dx Horizontal step per pixel.
-     * @param y0 Top edge of the view in the complex plane.
-     * @param dy Vertical step per pixel.
+     * @param centerX Real part of the view center.
+     * @param centerY Imaginary part of the view center.
+     * @param halfWidth Half the view width in the complex plane.
      */
-    void CalcIterationsPerturbation(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy);
+    void CalcIterationsPerturbation(float* pIterations, int64_t width, int64_t height, const fp128_t& centerX, const fp128_t& centerY,
+                                    const fp128_t& halfWidth);
 
     /**
      * @brief Compute a single Mandelbrot pixel at full fp128 precision.

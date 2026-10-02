@@ -3,7 +3,7 @@
  * @brief Decimal text for the fp128 values the UI shows, takes as input and stores.
  *
  * Text is the only form that carries an fp128 value's full precision through a line edit or
- * the settings store; a double keeps about 17 significant digits of the 36 an fp128 value
+ * the settings store; a double keeps about 17 significant digits of the 37 an fp128 value
  * holds. Center coordinates and Julia constant parts both go through these functions, each
  * with its own range.
  */
@@ -18,10 +18,10 @@
 /**
  * @brief Get the regular expression a center coordinate's text must match.
  *
- * Accepts a plain decimal number with an optional sign and at most two integer digits, for
- * example "-0.7436438870371587047521915034129". Exponents are not accepted. The two-digit
- * limit keeps a coordinate, plus the view's half-width around it, well inside the
- * [-128, 128) range of fp128_t.
+ * Accepts a plain decimal number in [-2, 2] with an optional sign, for example
+ * "-0.7436438870371587047521915034129". Exponents are not accepted. The range is the one
+ * QMandelbrotWidget clamps the view center to (maxCenterMagnitude), which holds the
+ * Mandelbrot set and every Julia set that is more than dust.
  *
  * The pattern is not anchored, which suits QRegularExpressionValidator: it anchors the
  * pattern itself and reports a partial match, such as a lone "-", as Intermediate.
@@ -44,14 +44,14 @@
 /**
  * @brief Parse a center coordinate typed or stored as decimal text.
  * @param text Text that must fully match CoordinateRegularExpression().
- * @return The value, accurate to about 36 decimal digits, or no value if the text doesn't match.
+ * @return The value, accurate to about 37 decimal digits, or no value if the text doesn't match.
  */
 [[nodiscard]] std::optional<fp128_t> ParseCoordinate(const QString& text);
 
 /**
  * @brief Parse a Julia constant's real or imaginary part typed or stored as decimal text.
  * @param text Text that must fully match JuliaComponentRegularExpression().
- * @return The value, accurate to about 36 decimal digits, or no value if the text doesn't match.
+ * @return The value, accurate to about 37 decimal digits, or no value if the text doesn't match.
  */
 [[nodiscard]] std::optional<fp128_t> ParseJuliaComponent(const QString& text);
 

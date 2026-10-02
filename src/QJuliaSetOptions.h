@@ -19,7 +19,7 @@
  *
  * Offers 10 preset complex constants (classic spirals, branching structures, etc.)
  * via a combo box, plus manual real/imaginary input fields validated to the
- * range [-2, 2]. The fields take decimal text at full fp128 precision, about 36
+ * range [-2, 2]. The fields take decimal text at full fp128 precision, about 37
  * decimal places. When auto-apply is enabled, changes are emitted immediately
  * via the juliaConstantChanged signal.
  */

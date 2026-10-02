@@ -360,18 +360,10 @@ void QtMainWindow::onRenderDone(FrameStats stats)
 
     // if zoom is > 65536, show as power of 2
     QString zoomStr;
-    const double threshold = std::pow(2.0, 16);
-    if (stats.zoom > threshold) {
-        double exp = std::log2(stats.zoom);
-        int expRounded = static_cast<int>(std::round(exp));
-        // if exponent is essentially integer, show as exact power, otherwise show rounded exponent with approximate value
-        if (std::fabs(exp - expRounded) < 0.01) {
-            zoomStr = QString("2^%1").arg(expRounded);
-        } else {
-            zoomStr = QString("2^%1 (~%2)").arg(expRounded).arg(stats.zoom, 0, 'e', 2);
-        }
+    if (stats.log2Zoom > 16) {
+        zoomStr = QString("2^%1").arg(stats.log2Zoom);
     } else {
-        zoomStr = QString::number(stats.zoom, 'f', 2);
+        zoomStr = QString::number(1ll << stats.log2Zoom);
     }
 
     _renderStatsMessage = QString("Render time: %1 ms | Zoom: x%2 | Size: %3x%4 | Iterations: %5")

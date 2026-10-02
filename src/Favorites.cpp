@@ -79,32 +79,16 @@ constexpr auto autoName = "auto"_L1;              ///< Stored value of maxIterat
     return {
         {.description = "Seahorse Valley", .centerX = fp128_t("-0.745428"), .centerY = fp128_t("0.113009"), .log2Zoom = 10, .maxIterations = 1024},
         {.description = "Elephant Valley", .centerX = fp128_t("0.3"), .centerY = fp128_t("0.02"), .log2Zoom = 7, .maxIterations = 2048},
-        {.description = "Triple Spiral Valley",
-         .centerX = fp128_t("-0.0888"),
-         .centerY = fp128_t("0.6556"),
-         .log2Zoom = 10,
-         .maxIterations = QMandelbrotWidget::max_iterations},
+        {.description = "Triple Spiral Valley", .centerX = fp128_t("-0.0888"), .centerY = fp128_t("0.6556"), .log2Zoom = 10, .maxIterations = QMandelbrotWidget::max_iterations},
         // centered on the period 3 nucleus, the largest copy of the set on the real axis
         {.description = "Mini Mandelbrot (Period 3)", .centerX = fp128_t("-1.7548776662466927"), .log2Zoom = 6, .maxIterations = 384},
         // where the period doubling bulbs along the real axis accumulate
         {.description = "Feigenbaum Point", .centerX = fp128_t("-1.4011551890920506"), .log2Zoom = 7, .maxIterations = 1536},
         // the target of the zoom sequence in Wikipedia's Mandelbrot set article
-        {.description = "Wikipedia Zoom Sequence",
-         .centerX = fp128_t("-0.743643887037158704752191506114774"),
-         .centerY = fp128_t("0.131825904205311970493132056385139"),
-         .log2Zoom = 16,
-         .maxIterations = 768},
-        {.description = "Douady Rabbit Julia Set",
-         .log2Zoom = 1,
-         .maxIterations = 128,
-         .setType = julia,
-         .juliaConstant = {fp128_t("-0.122561166876653619975245551820735654"), fp128_t("0.744861766619744236593170428604392367")}},
+        {.description = "Wikipedia Zoom Sequence", .centerX = fp128_t("-0.743643887037158704752191506114774"), .centerY = fp128_t("0.131825904205311970493132056385139"), .log2Zoom = 16, .maxIterations = 768},
+        {.description = "Douady Rabbit Julia Set", .log2Zoom = 1, .maxIterations = 128, .setType = julia, .juliaConstant = {fp128_t("-0.122561166876653619975245551820735654"), fp128_t("0.744861766619744236593170428604392367")}},
         {.description = "Basilica Julia Set", .log2Zoom = 1, .maxIterations = 128, .setType = julia, .juliaConstant = {fp128_t("-1"), fp128_t("0")}},
-        {.description = "Siegel Disk Julia Set",
-         .log2Zoom = 1,
-         .maxIterations = 128,
-         .setType = julia,
-         .juliaConstant = {fp128_t("-0.390540870218400050669762600713798486"), fp128_t("-0.58678790734696875119671464305571584")}},
+        {.description = "Siegel Disk Julia Set", .log2Zoom = 1, .maxIterations = 128, .setType = julia, .juliaConstant = {fp128_t("-0.390540870218400050669762600713798486"), fp128_t("-0.58678790734696875119671464305571584")}},
         {.description = "Spiral Julia Set", .log2Zoom = 1, .maxIterations = 1024, .setType = julia, .juliaConstant = {fp128_t("-0.8"), fp128_t("0.156")}},
     };
 }
@@ -155,7 +139,7 @@ QVector<Favorite> LoadFavorites()
         favorite.description = settings.value(descriptionKey).toString();
         favorite.centerX = *centerX;
         favorite.centerY = *centerY;
-        favorite.log2Zoom = std::clamp(log2Zoom, static_cast<int>(QMandelbrotWidget::logMinZoom), static_cast<int>(QMandelbrotWidget::logMaxZoom));
+        favorite.log2Zoom = std::clamp(log2Zoom, QMandelbrotWidget::logMinZoom, QMandelbrotWidget::logMaxZoom);
         // autoName doesn't parse as a number, and neither does the missing value of a favorite
         // saved before the limit was stored; both keep the default of Auto
         bool iterationsValid = false;

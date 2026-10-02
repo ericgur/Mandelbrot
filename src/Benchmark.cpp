@@ -239,7 +239,10 @@ bool ParseCommandLine(const QStringList& arguments, BenchmarkOptions& options)
         QString("pixel-iteration-limit"), QString("Escape-time iteration ceiling per pixel, or 0 to scale it with zoom. Default: 2048."), QString("count"));
     const QCommandLineOption iterationsOption(QString("iterations"), QString("Number of images to render and time. Default: 10."), QString("count"));
     const QCommandLineOption sizeOption(QString("size"), QString("Image size as WIDTHxHEIGHT. Default: 1280x720."), QString("WxH"));
-    const QCommandLineOption zoomOption(QString("zoom"), QString("Log2 of the zoom level of the benchmark view, 0 to 113. Default: 40."), QString("log2"));
+    const QCommandLineOption zoomOption(
+        QString("zoom"),
+        QString("Log2 of the zoom level of the benchmark view, %1 to %2. Default: 40.").arg(QMandelbrotWidget::logMinZoom).arg(QMandelbrotWidget::logMaxZoom),
+        QString("log2"));
     const QCommandLineOption jsonOption(QString("json"), QString("Also write the results to a JSON file. The path is optional and defaults to benchmark.json."),
                                         QString("file"));
 
@@ -273,8 +276,7 @@ bool ParseCommandLine(const QStringList& arguments, BenchmarkOptions& options)
     // 0 iterations per pixel is the widget's "scale the limit with the zoom level" mode.
     if (!ReadIntOption(parser, QString("pixel-iteration-limit"), 0, INT32_MAX, iterationLimit) ||
         !ReadIntOption(parser, QString("iterations"), 1, INT32_MAX, imageCount) ||
-        !ReadIntOption(parser, QString("zoom"), static_cast<int64_t>(QMandelbrotWidget::logMinZoom), static_cast<int64_t>(QMandelbrotWidget::logMaxZoom),
-                       log2Zoom)) {
+        !ReadIntOption(parser, QString("zoom"), QMandelbrotWidget::logMinZoom, QMandelbrotWidget::logMaxZoom, log2Zoom)) {
         return false;
     }
 

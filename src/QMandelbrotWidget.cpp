@@ -18,7 +18,59 @@
 
 using namespace std::chrono_literals;
 
-constexpr uint64_t MAX_DOUBLE_ZOOM_LEVEL = 1ull << 44;
+constexpr int32_t MAX_DOUBLE_LOG_ZOOM_LEVEL = 44;  ///< Deepest zoom, as a power of 2, that Auto precision renders with doubles.
+
+/// Largest distance from the view center, on either axis, that PixelCoordinate() returns.
+constexpr double pixelOffsetLimit = 5.0;
+static_assert(QMandelbrotWidget::maxCenterMagnitude + pixelOffsetLimit < (1 << fp128IntBits), "every pixel coordinate must fit fp128_t");
+static_assert(pixelOffsetLimit - QMandelbrotWidget::maxCenterMagnitude > 2, "a clamped pixel must escape at once");
+
+/**
+ * @brief Get the complex-plane coordinate of a pixel column or row.
+ *
+ * Pixel @p index of @p count sits at center + halfWidth * (2 * index - count) / width, which
+ * puts pixel 0 on the view's edge and gives rows the same step as columns, 2 * halfWidth / width.
+ *
+ * The coordinate is accurate to a few LSBs at every zoom level. The ratio (2 * index - count) /
+ * width splits into a whole number, which multiplies the half width exactly, and remainder /
+ * width with |remainder| < width. Both operands of that division are scaled by the power of 2
+ * just above width, which keeps them below 1 and exact in fp128_t, so the quotient and the
+ * multiply after it are each rounded once, and the split keeps the fp128 factor in range in a
+ * window of any shape. The alternatives are worse in two ways:
+ * - Stepping from the edge by a rounded per-pixel step adds that step's rounding once per pixel,
+ *   up to `width` LSBs across the image, which past zoom 2^100 shifts it by pixels and near
+ *   logMaxZoom collapses the step to zero.
+ * - Forming the ratio in double is off by 2^-53 of the half width, far above the LSB until zoom
+ *   2^70 or so. That is invisible, but it decides the count of chaotic pixels near the boundary:
+ *   at zoom 2^20, of the pixels where it disagreed with stepping, 10% matched an exact
+ *   computation; with this division, all of them did.
+ *
+ * An offset beyond pixelOffsetLimit is clamped to it, which takes a window more than twice as
+ * tall as it is wide at zoom 1x. Such a pixel is more than 3 from the origin on that axis
+ * wherever the center is, clamped or not, so it escapes at once either way and only its smooth
+ * shade moves. The clamp keeps every coordinate within fp128_t's range.
+ *
+ * @param center Center of the view on this axis.
+ * @param halfWidth Half the view width.
+ * @param index Pixel column or row.
+ * @param count Image width for a column, image height for a row.
+ * @param width Image width.
+ * @return The coordinate on this axis.
+ */
+[[nodiscard]] static fp128_t PixelCoordinate(const fp128_t& center, const fp128_t& halfWidth, int64_t index, int64_t count, int64_t width)
+{
+    const int64_t numerator = 2 * index - count;
+    const double offset = static_cast<double>(halfWidth) * static_cast<double>(numerator) / static_cast<double>(width);
+    if (std::fabs(offset) > pixelOffsetLimit) {
+        return center + fp128_t(std::copysign(pixelOffsetLimit, offset));
+    }
+
+    const int64_t whole = numerator / width;
+    const int64_t remainder = numerator - whole * width;
+    const double scale = std::exp2(std::ceil(std::log2(static_cast<double>(width))));
+    const fp128_t fraction = fp128_t(static_cast<double>(remainder) / scale) / fp128_t(static_cast<double>(width) / scale);
+    return center + halfWidth * whole + halfWidth * fraction;
+}
 
 /**
  * @brief Blend two QRgb colors using alpha interpolation.
@@ -56,78 +108,58 @@ QMandelbrotWidget::~QMandelbrotWidget()
 }
 
 /**
- * @brief Initialize view bounds to the default complex plane region.
+ * @brief Initialize the view to the default complex plane region.
  *
- * Sets the X range to [-2.5, 2.5] and zoom to 1x. If the INITIAL_POINT
- * macro is defined, uses preset coordinates for a specific deep-zoom location.
+ * Centers the view on the origin at zoom 1x, where it spans x in [-2.5, 2.5].
  */
 void QMandelbrotWidget::SetDefaultValues()
 {
-#ifdef INITIAL_POINT
-    _xmin = x_init[0];
-    _xmax = x_init[1];
-    _ymin = y_init[0];
-    _ymax = y_init[1];
-    _zoomLevel = zoom_init;
-#else
-    _xmax = 2.5;
-    _xmin = -_xmax;
-    _ymax = _ymin = 0;
-    _zoomLevel = 1;
-#endif
-    SetAspectRatio();
+    _logZoomLevel = 0;
+    SetViewCenter(fp128_t(0), fp128_t(0));
+}
+
+void QMandelbrotWidget::SetViewCenter(const fp128_t& centerX, const fp128_t& centerY)
+{
+    constexpr fp128_t limit = maxCenterMagnitude;
+    _centerX = std::clamp(centerX, -limit, limit);
+    _centerY = std::clamp(centerY, -limit, limit);
+}
+
+fp128_t QMandelbrotWidget::ViewHalfWidth() const
+{
+    static_assert(logMinZoom >= 0, "the half-width is a right shift by the zoom level");
+    static_assert(logMaxZoom + 1 <= fp128_t::F, "2.5 / 2^logMaxZoom must be exact in fp128_t");
+
+    // The default view spans x in [-2.5, 2.5], and every zoom step halves that span. 2.5 is
+    // 5 / 2, so the shifted value's lowest bit is 2^-(_logZoomLevel + 1) and the shift is exact.
+    fp128_t halfWidth = 2.5;
+    halfWidth >>= _logZoomLevel;
+    return halfWidth;
 }
 
 /**
- * @brief Adjust Y bounds to preserve the correct aspect ratio.
+ * @brief Zoom by a power of 2 and center the view on a specific screen coordinate.
  *
- * Recomputes _ymin and _ymax based on the current X bounds and
- * the widget's width/height ratio, keeping the Y center unchanged.
+ * The complex-plane coordinate of the given pixel becomes the new view center. The new zoom
+ * level is clamped to [logMinZoom, logMaxZoom]; when the clamp leaves it unchanged, the view is
+ * left as it is.
+ *
+ * @param point Screen coordinates of the new view center.
+ * @param logZoomDelta Zoom steps of 2x each (positive to zoom in, negative to zoom out).
  */
-void QMandelbrotWidget::SetAspectRatio()
+void QMandelbrotWidget::OnZoomChange(const QPoint& point, int32_t logZoomDelta)
 {
-    QSize s = size();
-
-    // use _xmin, _xmax and m_rect to determine _ymin and _ymax
-    // check if window created
-    if (0 == s.height() || 0 == s.width())
+    const int32_t logZoomLevel = std::clamp(_logZoomLevel + logZoomDelta, logMinZoom, logMaxZoom);
+    if (logZoomLevel == _logZoomLevel) {
         return;
+    }
 
-    fp128_t ratio = (double)s.height() / s.width();
-    fp128_t ysize = (_xmax - _xmin) * (ratio >> 1);
-    _ymin = ((_ymax + _ymin) >> 1) - ysize;
-    _ymax = _ymin + (ysize << 1);
-}
+    const fp128_t halfWidth = ViewHalfWidth();
+    const fp128_t centerX = PixelCoordinate(_centerX, halfWidth, point.x(), width(), width());
+    const fp128_t centerY = PixelCoordinate(_centerY, halfWidth, point.y(), height(), width());
 
-/**
- * @brief Zoom the view centered on a specific screen coordinate.
- *
- * Preserves the complex-plane coordinate under the given pixel while
- * scaling the view bounds by the specified multiplier.
- *
- * @param point Screen coordinates of the zoom center.
- * @param zoomMultiplier Zoom factor (>1 to zoom in, <1 to zoom out).
- */
-void QMandelbrotWidget::OnZoomChange(const QPoint& point, double zoomMultiplier)
-{
-    QSize s = size();
-    static fp128_t one = 1;
-
-    // fix y coords
-    fp128_t alpha = (double)(point.y()) / (s.height() - 1);
-    fp128_t quarter = (_ymax - _ymin) * (1.0 / (zoomMultiplier * 2.0));
-    fp128_t center = alpha * _ymax + (one - alpha) * _ymin;
-
-    _ymin = center - quarter;
-    _ymax = center + quarter;
-
-    // fix x coords
-    alpha = (double)(point.x()) / (s.width() - 1);
-    quarter = (_xmax - _xmin) * (1.0 / (zoomMultiplier * 2.0));
-    center = alpha * _xmax + (one - alpha) * _xmin;
-    _xmin = center - quarter;
-    _xmax = center + quarter;
-
+    _logZoomLevel = logZoomLevel;
+    SetViewCenter(centerX, centerY);
     invalidate(false);
 }
 
@@ -505,24 +537,83 @@ void QMandelbrotWidget::CalcIterationsDoubleImpl(float* pIterations, int64_t w, 
  *
  * Same escape-time algorithm as CalcIterationsDouble() but uses fp128_t
  * for all complex-plane arithmetic, enabling extreme zoom levels
- * up to 2^113. The imaginary update uses a left-shift optimization:
+ * up to 2^logMaxZoom. The imaginary update uses a left-shift optimization:
  * v = (u * v) << 1 instead of v = 2 * u * v.
  *
  * @param pIterations Output buffer for per-pixel iteration counts.
  * @param width Image width in pixels.
  * @param height Image height in pixels.
- * @param x0 Left edge of the view in the complex plane.
- * @param dx Horizontal step per pixel.
- * @param y0 Top edge of the view in the complex plane.
- * @param dy Vertical step per pixel.
+ * @param centerX Real part of the view center.
+ * @param centerY Imaginary part of the view center.
+ * @param halfWidth Half the view width in the complex plane.
  */
-void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
+void QMandelbrotWidget::CalcIterationsFP128(float* pIterations, int64_t width, int64_t height, const fp128_t& centerX, const fp128_t& centerY,
+                                            const fp128_t& halfWidth)
 {
     if (_setType == stJulia) {
-        CalcIterationsFP128Impl<true>(pIterations, width, height, x0, dx, y0, dy);
+        CalcIterationsFP128Impl<true>(pIterations, width, height, centerX, centerY, halfWidth);
     } else {
-        CalcIterationsFP128Impl<false>(pIterations, width, height, x0, dx, y0, dy);
+        CalcIterationsFP128Impl<false>(pIterations, width, height, centerX, centerY, halfWidth);
     }
+}
+
+/**
+ * @brief Test whether an iterate is still within the escape radius.
+ *
+ * The test is |Z|^2 < 4, but the iterate that escapes can have a squared modulus well beyond
+ * fp128_t's range of [-2^fp128IntBits, 2^fp128IntBits): |Z| < 2 before a step and Julia constant
+ * parts in [-2, 2] bound it by (4 + 2.83)^2 = 46.6, and a pixel PixelCoordinate() puts 7 from
+ * the origin on both axes starts at 98. The multiply wraps silently, so that modulus can read
+ * below 4 and keep a pixel iterating on garbage. u and v are therefore tested too: an iterate
+ * with either part outside [-2, 2) has escaped whatever its modulus, and while both parts are
+ * inside it the modulus is at most 8 - exact, or with 3 integer bits wrapped to -8, which reads
+ * as escaped like the 8 it stands for. Where nothing overflowed this is the plain |Z|^2 < 4
+ * test bit for bit, for every fp128IntBits from 3 up.
+ *
+ * All three tests read only the high QWORDs, which carry the sign and the integer bits; 2 and 4
+ * have all-zero low QWORDs. Offsetting a part by 2 maps [-2, 2) onto [0, 4) as an unsigned
+ * value, a modulus that hasn't wrapped is never negative, and 4 is a power of 2, so the three
+ * values are all below 4 exactly when their OR is. That is two adds, two ORs and one compare,
+ * and the fp128 render measured 1-3% faster with it than with the bare modulus compare it
+ * replaced; four signed compares and their branches made it 7.5% slower.
+ *
+ * @param u Real part of the iterate.
+ * @param v Imaginary part of the iterate.
+ * @param modulus u^2 + v^2, as fp128 computed it.
+ * @return True while the iterate has not escaped.
+ */
+[[nodiscard]] static FP128_FORCE_INLINE bool Bounded(const fp128_t& u, const fp128_t& v, const fp128_t& modulus)
+{
+    // 2 and 4 as the high QWORD of an fp128_t
+    constexpr uint64_t two = 2ull << (fp128_t::F - 64);
+    constexpr uint64_t four = 4ull << (fp128_t::F - 64);
+
+    uint64_t low = 0, uHigh = 0, vHigh = 0, modulusHigh = 0;
+    u.get_components(low, uHigh);
+    v.get_components(low, vHigh);
+    modulus.get_components(low, modulusHigh);
+
+    return ((uHigh + two) | (vHigh + two) | modulusHigh) < four;
+}
+
+/**
+ * @brief Get the smooth iteration count of an escaped iterate.
+ *
+ * mu = iter + 1 - sqrt(|Z|^2 - 4) / sqrt(32), with |Z|^2 in [4, 36) for Mandelbrot. The modulus
+ * is formed in double from the parts, since the fp128 one can have wrapped (see Bounded()).
+ *
+ * @param iter Iteration at which the orbit escaped.
+ * @param u Real part of the escaped iterate.
+ * @param v Imaginary part of the escaped iterate.
+ * @return The fractional iteration count.
+ */
+[[nodiscard]] static float SmoothIterations(int64_t iter, const fp128_t& u, const fp128_t& v)
+{
+    const double ud = static_cast<double>(u);
+    const double vd = static_cast<double>(v);
+    // rounding can take a modulus of exactly 4 a hair below it
+    const double excess = std::max(ud * ud + vd * vd - 4.0, 0.0);
+    return static_cast<float>(iter + 1) - std::sqrt(static_cast<float>(excess)) / std::sqrt(32.0f);
 }
 
 /**
@@ -665,14 +756,13 @@ static FP128_FORCE_INLINE bool CheckPeriodicity(FP128Orbit& o)
  * @param xc Real part of C.
  * @param yc Imaginary part of C.
  * @param maxIter Iteration limit.
- * @param radius_sq Squared escape radius.
  */
-static FP128_FORCE_INLINE void RunOrbit(FP128Orbit& o, const fp128_t& xc, const fp128_t& yc, int64_t maxIter, const fp128_t& radius_sq)
+static FP128_FORCE_INLINE void RunOrbit(FP128Orbit& o, const fp128_t& xc, const fp128_t& yc, int64_t maxIter)
 {
-    while (!o.periodic && o.iter < maxIter && o.modulus < radius_sq) {
+    while (!o.periodic && o.iter < maxIter && Bounded(o.u, o.v, o.modulus)) {
         const int64_t stop = std::min(o.iter + fp128PeriodChunk, maxIter);
 
-        while (o.iter < stop && o.modulus < radius_sq) {
+        while (o.iter < stop && Bounded(o.u, o.v, o.modulus)) {
             ++o.iter;
             StepOrbit(o, xc, yc);
         }
@@ -684,21 +774,20 @@ static FP128_FORCE_INLINE void RunOrbit(FP128Orbit& o, const fp128_t& xc, const 
 }
 
 template<bool IsJulia>
-void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
+void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t width, int64_t height, const fp128_t& centerX, const fp128_t& centerY,
+                                                const fp128_t& halfWidth)
 {
-    const fp128_t radius_sq = 2 * 2;
-    const float sqrt_32 = sqrt(32.f);
     const fp128_t cr = IsJulia ? _juliaConstant.real : fp128_t {};
     const fp128_t ci = IsJulia ? _juliaConstant.imag : fp128_t {};
 
     fp128_t* xTable = new fp128_t[width];
     for (int i = 0; i < width; ++i) {
-        xTable[i] = x0 + dx * i;
+        xTable[i] = PixelCoordinate(centerX, halfWidth, i, width, width);
     }
 
 #pragma omp parallel for schedule(dynamic) if (_useOpenMP)
     for (int l = 0; l < height; ++l) {
-        const fp128_t y = y0 + (dy * l);
+        const fp128_t y = PixelCoordinate(centerY, halfWidth, l, height, width);
         const fp128_t yc = IsJulia ? ci : y;
         float* pbuff = pIterations + width * l;
 
@@ -719,9 +808,7 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
         const auto writeResult = [&](const FP128Orbit& o) {
             const int64_t iter = o.periodic ? _maxIter : o.iter;
             if (_smoothLevel && iter < _maxIter) {
-                // modulus is in the range [4,36), create a scale between the 2 values.
-                float mu = (float)(iter + 1) - (float)sqrt((float(o.modulus - radius_sq))) / sqrt_32;
-                *pbuff++ = mu;
+                *pbuff++ = SmoothIterations(iter, o.u, o.v);
             } else {
                 *pbuff++ = (float)std::max<int64_t>(iter, 1);
             }
@@ -738,11 +825,11 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
                 FP128Orbit a = MakeOrbit<IsJulia>(xTable[k], y);
                 FP128Orbit b = MakeOrbit<IsJulia>(xTable[k + 1], y);
 
-                while (a.iter < _maxIter && a.modulus < radius_sq && b.iter < _maxIter && b.modulus < radius_sq) {
+                while (a.iter < _maxIter && Bounded(a.u, a.v, a.modulus) && b.iter < _maxIter && Bounded(b.u, b.v, b.modulus)) {
                     const int64_t stop = std::min(a.iter + fp128PeriodChunk, _maxIter);
 
                     // The two lanes advance together, so one iteration counter serves both.
-                    while (a.iter < stop && a.modulus < radius_sq && b.modulus < radius_sq) {
+                    while (a.iter < stop && Bounded(a.u, a.v, a.modulus) && Bounded(b.u, b.v, b.modulus)) {
                         ++a.iter;
                         ++b.iter;
                         StepOrbit(a, xcA, yc);
@@ -754,8 +841,8 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
                     }
                 }
 
-                RunOrbit(a, xcA, yc, _maxIter, radius_sq);
-                RunOrbit(b, xcB, yc, _maxIter, radius_sq);
+                RunOrbit(a, xcA, yc, _maxIter);
+                RunOrbit(b, xcB, yc, _maxIter);
                 writeResult(a);
                 writeResult(b);
             }
@@ -765,7 +852,7 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
             const fp128_t xc = IsJulia ? cr : xTable[k];
             FP128Orbit o = MakeOrbit<IsJulia>(xTable[k], y);
 
-            RunOrbit(o, xc, yc, _maxIter, radius_sq);
+            RunOrbit(o, xc, yc, _maxIter);
             writeResult(o);
         }
     }
@@ -782,16 +869,13 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
  */
 float QMandelbrotWidget::CalcSinglePixelFP128(fp128_t cx, fp128_t cy)
 {
-    const fp128_t radius_sq = 4u;
-    const float sqrt_32 = sqrt(32.f);
-
     fp128_t u = 0u, v = 0u, usq = 0u, vsq = 0u, modulus = 0u, tmp;
     fp128_t uRef = 0u, vRef = 0u;
     int period = 32;
     int nextSave = period;
     int iter = 0;
 
-    while (iter < _maxIter && modulus < radius_sq) {
+    while (iter < _maxIter && Bounded(u, v, modulus)) {
         ++iter;
         tmp = usq - vsq + cx;
         v = ((u * v) << 1) + cy;
@@ -813,7 +897,7 @@ float QMandelbrotWidget::CalcSinglePixelFP128(fp128_t cx, fp128_t cy)
     }
 
     if (_smoothLevel && iter < _maxIter) {
-        return (float)(iter + 1) - (float)sqrt((float)(modulus - radius_sq)) / sqrt_32;
+        return SmoothIterations(iter, u, v);
     }
     return (float)std::max(iter, 1);
 }
@@ -839,10 +923,11 @@ float QMandelbrotWidget::CalcSinglePixelFP128(fp128_t cx, fp128_t cy)
  *
  * Julia is not handled by this path and falls through to CalcIterationsFP128Impl<true>().
  */
-void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w, int64_t h, fp128_t x0, fp128_t dx, fp128_t y0, fp128_t dy)
+void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w, int64_t h, const fp128_t& centerX, const fp128_t& centerY,
+                                                   const fp128_t& halfWidth)
 {
     if (_setType == stJulia) {
-        CalcIterationsFP128Impl<true>(pIterations, w, h, x0, dx, y0, dy);
+        CalcIterationsFP128Impl<true>(pIterations, w, h, centerX, centerY, halfWidth);
         return;
     }
 
@@ -854,8 +939,8 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
     //    real/imag parts and modulus as doubles for the inner perturbation loop.
     const int64_t refX = w / 2;
     const int64_t refY = h / 2;
-    const fp128_t cxRef = x0 + dx * refX;
-    const fp128_t cyRef = y0 + dy * refY;
+    const fp128_t cxRef = PixelCoordinate(centerX, halfWidth, refX, w, w);
+    const fp128_t cyRef = PixelCoordinate(centerY, halfWidth, refY, h, w);
 
     auto refZx = std::make_unique<double[]>((size_t)_maxIter + 1);
     auto refZy = std::make_unique<double[]>((size_t)_maxIter + 1);
@@ -865,7 +950,6 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
     int64_t refLen = _maxIter;
     {
         fp128_t zx = 0u, zy = 0u, zxsq = 0u, zysq = 0u, zmod = 0u, ztmp;
-        const fp128_t four = 4u;
         for (int64_t n = 1; n <= _maxIter; ++n) {
             ztmp = zxsq - zysq + cxRef;
             zy = ((zx * zy) << 1) + cyRef;
@@ -880,7 +964,7 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
             refZy[n] = zyd;
             refZmod[n] = zxd * zxd + zyd * zyd;
 
-            if (zmod >= four) {
+            if (!Bounded(zx, zy, zmod)) {
                 refLen = n;
                 break;
             }
@@ -888,16 +972,22 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
     }
     const bool refEscaped = (refLen < _maxIter);
 
-    // 2. Pre-compute (k - refX) * dx as doubles. dx is tiny at deep zoom so
-    //    these fit cleanly in IEEE 754.
+    // 2. Each pixel's offset from the reference, halfWidth * 2 * (k - refX) / w, formed in double.
+    //    halfWidth is a power of 2 times 5/2 and exact in double, so the offset is good to 53 bits
+    //    at any zoom; it stays clear of fp128_t's narrow integer range, and differs from the
+    //    difference of the fp128 coordinates only by their rounding.
+    const double halfWidthD = static_cast<double>(halfWidth);
+    auto xTable = std::make_unique<fp128_t[]>((size_t)w);
     auto dcxTable = std::make_unique<double[]>((size_t)w);
     for (int64_t k = 0; k < w; ++k) {
-        dcxTable[k] = (double)(dx * (k - refX));
+        xTable[k] = PixelCoordinate(centerX, halfWidth, k, w, w);
+        dcxTable[k] = halfWidthD * (2.0 * static_cast<double>(k - refX) / static_cast<double>(w));
     }
 
 #pragma omp parallel for schedule(dynamic) if (_useOpenMP)
     for (int l = 0; l < h; ++l) {
-        const double dcy = (double)(dy * (l - refY));
+        const fp128_t y = PixelCoordinate(centerY, halfWidth, l, h, w);
+        const double dcy = halfWidthD * (2.0 * static_cast<double>(l - refY) / static_cast<double>(w));
         float* pbuff = pIterations + w * l;
 
         for (int k = 0; k < w; ++k) {
@@ -943,9 +1033,7 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
 
             float result;
             if (glitched || refExhausted) {
-                const fp128_t cx = x0 + dx * k;
-                const fp128_t cy = y0 + dy * l;
-                result = CalcSinglePixelFP128(cx, cy);
+                result = CalcSinglePixelFP128(xTable[k], y);
             } else if (escaped) {
                 if (_smoothLevel) {
                     result = (float)(iter + 1) - (float)sqrt(mod - radius_sq) / sqrt_32;
@@ -959,6 +1047,25 @@ void QMandelbrotWidget::CalcIterationsPerturbation(float* pIterations, int64_t w
 
             *pbuff++ = result;
         }
+    }
+}
+
+void QMandelbrotWidget::CalcIterations(float* pIterations, int64_t width, int64_t height)
+{
+    const fp128_t halfWidth = ViewHalfWidth();
+
+    if (_precision == Precision::Double || (_precision == Precision::Auto && _logZoomLevel <= MAX_DOUBLE_LOG_ZOOM_LEVEL)) {
+        // the view's top left corner and pixel step, as PixelCoordinate() places them
+        const double dx = 2.0 * static_cast<double>(halfWidth) / static_cast<double>(width);
+        const double x0 = static_cast<double>(_centerX) - static_cast<double>(halfWidth);
+        const double y0 = static_cast<double>(_centerY) - static_cast<double>(halfWidth) * static_cast<double>(height) / static_cast<double>(width);
+        CalcIterationsDouble(pIterations, width, height, x0, dx, y0, dx);
+    } else if (_precision == Precision::FixedPoint128) {
+        CalcIterationsFP128(pIterations, width, height, _centerX, _centerY, halfWidth);
+    } else {
+        // Auto past 2^44 and explicit Perturbation both land here.
+        // Julia falls through to fp128 inside CalcIterationsPerturbation.
+        CalcIterationsPerturbation(pIterations, width, height, _centerX, _centerY, halfWidth);
     }
 }
 
@@ -1000,20 +1107,7 @@ int64_t QMandelbrotWidget::RenderFrame()
     bool historgamValid = (_paletteType == palHistogram) && fractalDataValid();
 
     if (!fractalDataValid()) {
-        SetAspectRatio();
-        fp128_t dx = (_xmax - _xmin) * (1.0 / w);
-        fp128_t dy = dx;
-
-        if (_precision == Precision::Double || (_precision == Precision::Auto && _zoomLevel <= MAX_DOUBLE_ZOOM_LEVEL)) {
-            CalcIterationsDouble(_iterations, w, h, (double)_xmin, (double)dx, (double)_ymin, (double)dy);
-        } else if (_precision == Precision::FixedPoint128) {
-            CalcIterationsFP128(_iterations, w, h, _xmin, dx, _ymin, dy);
-        } else {
-            // Auto past 2^44 and explicit Perturbation both land here.
-            // Julia falls through to fp128 inside CalcIterationsPerturbation.
-            CalcIterationsPerturbation(_iterations, w, h, _xmin, dx, _ymin, dy);
-        }
-
+        CalcIterations(_iterations, w, h);
         setFractalDataValid();
     }
 
@@ -1049,7 +1143,7 @@ void QMandelbrotWidget::paintEvent(QPaintEvent* event)
     FrameStats stats;
     const int64_t elapsedMs = elapsedNs / 1000000;
     stats.render_time_ms = static_cast<uint32_t>(elapsedMs > UINT32_MAX ? UINT32_MAX : elapsedMs);
-    stats.zoom = static_cast<float>(_zoomLevel);
+    stats.log2Zoom = _logZoomLevel;
     stats.size = size();
     stats.max_iterations = _maxIter;
     emit renderDone(stats);
@@ -1062,30 +1156,9 @@ double QMandelbrotWidget::renderOffscreen()
 
 void QMandelbrotWidget::setView(const fp128_t& centerX, const fp128_t& centerY, int32_t log2Zoom)
 {
-    log2Zoom = std::clamp(log2Zoom, static_cast<int32_t>(logMinZoom), static_cast<int32_t>(logMaxZoom));
-
-    // The default view spans x in [-2.5, 2.5]; every zoom step halves that span.
-    fp128_t halfWidth = 2.5;
-    halfWidth >>= log2Zoom;
-
-    _xmin = centerX - halfWidth;
-    _xmax = centerX + halfWidth;
-    // SetAspectRatio() derives the Y bounds from their midpoint, so collapsing both onto
-    // centerY centers the view vertically on it.
-    _ymin = _ymax = centerY;
-    _zoomLevel = pow(2.0, static_cast<double>(log2Zoom));
-
-    SetAspectRatio();
+    _logZoomLevel = std::clamp(log2Zoom, logMinZoom, logMaxZoom);
+    SetViewCenter(centerX, centerY);
     invalidate();
-}
-
-int32_t QMandelbrotWidget::log2Zoom() const
-{
-    // Zoom only ever changes by powers of 2, so rounding just drops floating point noise. The
-    // clamp maps the below-1x zoom that zooming out with the keyboard can reach to 1x, which is
-    // as far out as setView() goes.
-    const long exponent = std::lround(std::log2(_zoomLevel));
-    return static_cast<int32_t>(std::clamp(exponent, static_cast<long>(logMinZoom), static_cast<long>(logMaxZoom)));
 }
 
 void QMandelbrotWidget::resizeEvent(QResizeEvent* event)
@@ -1105,31 +1178,21 @@ void QMandelbrotWidget::resizeEvent(QResizeEvent* event)
  */
 void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
 {
-    double zoomMultiplier = 0;
-    if (event->button() == Qt::LeftButton) {
-        zoomMultiplier = _zoomIncrement;
-        if (event->modifiers() & Qt::ControlModifier) {
-            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? _zoomIncrement * 4 : _zoomIncrement * 2;
-        }
-    } else if (event->button() == Qt::RightButton) {
-        zoomMultiplier = 0.5;
-        if (event->modifiers() & Qt::ControlModifier) {
-            zoomMultiplier = (event->modifiers() & Qt::ShiftModifier) ? 1.0 / (_zoomIncrement * 4) : 1.0 / (_zoomIncrement * 2);
-        }
-    } else if (event->button() == Qt::MiddleButton) {
+    if (event->button() == Qt::MiddleButton) {
         resetView();
         return;
     }
 
-    if (zoomMultiplier > 0) {
-        _zoomLevel *= zoomMultiplier;
-        if (_zoomLevel < 1.0) {
-            _zoomLevel = 1.0;
-        } else if (_zoomLevel > pow(2.0, logMaxZoom)) {
-            _zoomLevel = pow(2.0, logMaxZoom);
-        }
+    // one step zooms 2x; Ctrl makes it 4x and Ctrl+Shift 8x
+    int32_t logZoomDelta = 1;
+    if (event->modifiers() & Qt::ControlModifier) {
+        logZoomDelta = (event->modifiers() & Qt::ShiftModifier) ? 3 : 2;
+    }
 
-        OnZoomChange(event->pos(), zoomMultiplier);
+    if (event->button() == Qt::LeftButton) {
+        OnZoomChange(event->pos(), logZoomDelta);
+    } else if (event->button() == Qt::RightButton) {
+        OnZoomChange(event->pos(), -logZoomDelta);
     }
 }
 
@@ -1137,21 +1200,21 @@ void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
  * @brief Compute automatic iteration limits based on zoom level.
  *
  * Linearly interpolates between min_iterations (at zoom 1x) and
- * max_iterations (at zoom 2^113) using the formula:
- * iters = min + (log2(zoom) / 113) * (max - min).
+ * max_iterations (at zoom 2^logMaxZoom) using the formula:
+ * iters = min + (log2(zoom) / logMaxZoom) * (max - min).
  *
  * @return The computed iteration limit.
  */
 int64_t QMandelbrotWidget::calcAutoIterationLimits()
 {
-    return autoIterationLimit(log2(_zoomLevel));
+    return autoIterationLimit(_logZoomLevel);
 }
 
-int64_t QMandelbrotWidget::autoIterationLimit(double log2Zoom)
+int64_t QMandelbrotWidget::autoIterationLimit(int32_t log2Zoom)
 {
     // make iterations a function of zoom level.
-    // map min_iterations to zoom=1 or smaller, and max_iterations to 2^113
-    double logZoom = std::max(log2Zoom, 0.0);
+    // map min_iterations to zoom=1 or smaller, and max_iterations to 2^logMaxZoom
+    const double logZoom = std::max(log2Zoom, 0);
 
     int64_t iters = static_cast<int64_t>(min_iterations + (logZoom / logMaxZoom) * (max_iterations - min_iterations));
     return iters;
@@ -1179,24 +1242,8 @@ void QMandelbrotWidget::saveImage(int width, int height)
     if (fn.isEmpty())
         return;
 
-    // Recompute Y bounds for the target aspect ratio around the current Y center.
-    fp128_t ratio = (double)height / (double)width;
-    fp128_t ysize = (_xmax - _xmin) * (ratio >> 1);
-    fp128_t yCenter = (_ymax + _ymin) >> 1;
-    fp128_t yMin = yCenter - ysize;
-
-    fp128_t dx = (_xmax - _xmin) * (1.0 / width);
-    fp128_t dy = dx;
-
     auto iterations = std::make_unique<float[]>((size_t)width * (size_t)height);
-
-    if (_precision == Precision::Double || (_precision == Precision::Auto && _zoomLevel <= MAX_DOUBLE_ZOOM_LEVEL)) {
-        CalcIterationsDouble(iterations.get(), width, height, (double)_xmin, (double)dx, (double)yMin, (double)dy);
-    } else if (_precision == Precision::FixedPoint128) {
-        CalcIterationsFP128(iterations.get(), width, height, _xmin, dx, yMin, dy);
-    } else {
-        CalcIterationsPerturbation(iterations.get(), width, height, _xmin, dx, yMin, dy);
-    }
+    CalcIterations(iterations.get(), width, height);
 
     if (_paletteType == palHistogram) {
         CreateHistogram(iterations.get(), width, height);
@@ -1246,14 +1293,12 @@ void QMandelbrotWidget::resetView()
 
 void QMandelbrotWidget::zoomIn()
 {
-    _zoomLevel *= _zoomIncrement;
-    OnZoomChange(QPoint(width() / 2, height() / 2), _zoomIncrement);
+    OnZoomChange(QPoint(width() / 2, height() / 2), 1);
 }
 
 void QMandelbrotWidget::zoomOut()
 {
-    _zoomLevel /= _zoomIncrement;
-    OnZoomChange(QPoint(width() / 2, height() / 2), 1.0 / _zoomIncrement);
+    OnZoomChange(QPoint(width() / 2, height() / 2), -1);
 }
 
 /**
@@ -1329,9 +1374,8 @@ void QMandelbrotWidget::animationTick()
  */
 void QMandelbrotWidget::panHorizontal(double amount)
 {
-    auto dx = (_xmax - _xmin) * amount;
-    _xmin += dx;
-    _xmax += dx;
+    // the view is 2 * halfWidth wide
+    SetViewCenter(_centerX + (ViewHalfWidth() << 1) * amount, _centerY);
     invalidate(false);
 }
 
@@ -1341,9 +1385,9 @@ void QMandelbrotWidget::panHorizontal(double amount)
  */
 void QMandelbrotWidget::panVertical(double amount)
 {
-    auto dy = (_ymax - _ymin) * amount;
-    _ymin += dy;
-    _ymax += dy;
+    // the view is 2 * halfWidth wide and height / width of that high
+    const double viewWidths = amount * static_cast<double>(height()) / static_cast<double>(std::max(width(), 1));
+    SetViewCenter(_centerX, _centerY + (ViewHalfWidth() << 1) * viewWidths);
     invalidate(false);
 }
 

@@ -20,7 +20,7 @@
 namespace
 {
 
-constexpr int decimalFieldChars = 40;     ///< Coordinate and Julia fields fit a sign, two integer digits, the point and 36 decimals.
+constexpr int decimalFieldChars = 40;     ///< Coordinate and Julia fields fit a sign, an integer digit, the point and 37 decimals.
 constexpr int maxPlainZoomExponent = 16;  ///< Above 2^16 the multiplier is shown in scientific notation, like the status bar.
 
 }  // namespace
@@ -31,11 +31,11 @@ QFavoritesDialog::QFavoritesDialog(std::function<Favorite()> currentView, QWidge
 
     ui.setType->addItem("Mandelbrot", QMandelbrotWidget::stMandelbrot);
     ui.setType->addItem("Julia Set", QMandelbrotWidget::stJulia);
-    ui.zoom->setRange(static_cast<int>(QMandelbrotWidget::logMinZoom), static_cast<int>(QMandelbrotWidget::logMaxZoom));
+    ui.zoom->setRange(QMandelbrotWidget::logMinZoom, QMandelbrotWidget::logMaxZoom);
     // same range as the iterations slider in the main window
     ui.maxIterations->setRange(static_cast<int>(QMandelbrotWidget::min_fixed_iterations), static_cast<int>(QMandelbrotWidget::max_iterations));
 
-    // regular expressions rather than QDoubleValidator: they take all 36 decimals, and keep the
+    // regular expressions rather than QDoubleValidator: they take all 37 decimals, and keep the
     // '.' decimal point that the parse functions expect whatever the system locale
     auto* coordinateValidator = new QRegularExpressionValidator(CoordinateRegularExpression(), this);
     ui.centerX->setValidator(coordinateValidator);
