@@ -31,9 +31,10 @@
  * exec() returns Accepted, so Cancel discards every change.
  *
  * @par Validation
- * Center coordinates are entered as decimal text, the only form that carries their full
- * 128-bit precision. A validator only lets through text that CoordinateRegularExpression()
- * matches, and an edit reaches the entry as soon as the text parses. Text that is still
+ * Center coordinates and the Julia constant's parts are entered as decimal text, the only
+ * form that carries their full 128-bit precision. Validators only let through text that
+ * CoordinateRegularExpression() or JuliaComponentRegularExpression() matches, and an edit
+ * reaches the entry as soon as the text parses. Text that is still
  * incomplete, such as a lone "-", is not stored: OK refuses to close while a field shows such
  * text, and selecting another entry discards it.
  *

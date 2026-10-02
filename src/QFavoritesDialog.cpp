@@ -12,7 +12,6 @@
 #include <algorithm>
 #include <cmath>
 #include <utility>
-#include <QDoubleValidator>
 #include <QMessageBox>
 #include <QRegularExpressionValidator>
 #include <QSignalBlocker>
@@ -21,18 +20,8 @@
 namespace
 {
 
-constexpr int coordinateFieldChars = 40;  ///< Coordinate fields fit a sign, two integer digits, the point and 36 decimals.
+constexpr int decimalFieldChars = 40;     ///< Coordinate and Julia fields fit a sign, two integer digits, the point and 36 decimals.
 constexpr int maxPlainZoomExponent = 16;  ///< Above 2^16 the multiplier is shown in scientific notation, like the status bar.
-
-/**
- * @brief Format a Julia constant component so that it reads back as the same double.
- * @param value Component to format.
- * @return The shortest text that round-trips, for example "0.285".
- */
-[[nodiscard]] QString JuliaComponentToString(double value)
-{
-    return QString::number(value, 'g', QLocale::FloatingPointShortest);
-}
 
 }  // namespace
 
@@ -46,20 +35,20 @@ QFavoritesDialog::QFavoritesDialog(std::function<Favorite()> currentView, QWidge
     // same range as the iterations slider in the main window
     ui.maxIterations->setRange(static_cast<int>(QMandelbrotWidget::min_fixed_iterations), static_cast<int>(QMandelbrotWidget::max_iterations));
 
-    // ParseCoordinate() and QString::toDouble() both expect a '.' decimal point, so neither
-    // validator may follow a system locale that uses ','
+    // regular expressions rather than QDoubleValidator: they take all 36 decimals, and keep the
+    // '.' decimal point that the parse functions expect whatever the system locale
     auto* coordinateValidator = new QRegularExpressionValidator(CoordinateRegularExpression(), this);
     ui.centerX->setValidator(coordinateValidator);
     ui.centerY->setValidator(coordinateValidator);
-    // same limits as the Julia Set Options dialog
-    auto* juliaValidator = new QDoubleValidator(-2, 2, 10, this);
-    juliaValidator->setLocale(QLocale::c());
+    // same range as the Julia Set Options dialog
+    auto* juliaValidator = new QRegularExpressionValidator(JuliaComponentRegularExpression(), this);
     ui.juliaReal->setValidator(juliaValidator);
     ui.juliaImag->setValidator(juliaValidator);
 
-    const int coordinateWidth = ui.centerX->fontMetrics().horizontalAdvance(QString(coordinateFieldChars, u'0'));
-    ui.centerX->setMinimumWidth(coordinateWidth);
-    ui.centerY->setMinimumWidth(coordinateWidth);
+    const int decimalFieldWidth = ui.centerX->fontMetrics().horizontalAdvance(QString(decimalFieldChars, u'0'));
+    for (QLineEdit* field : {ui.centerX, ui.centerY, ui.juliaReal, ui.juliaImag}) {
+        field->setMinimumWidth(decimalFieldWidth);
+    }
 
     connect(ui.favoritesList, &QListWidget::currentRowChanged, this, &QFavoritesDialog::ShowCurrentFavorite);
     connect(ui.favoritesList, &QListWidget::itemDoubleClicked, this, &QFavoritesDialog::GoToCurrent);
@@ -181,14 +170,14 @@ void QFavoritesDialog::ShowCurrentFavorite()
 
     ui.description->setText(favorite->description);
     ui.setType->setCurrentIndex(ui.setType->findData(favorite->setType));
-    ui.centerX->setText(CoordinateToString(favorite->centerX));
-    ui.centerY->setText(CoordinateToString(favorite->centerY));
+    ui.centerX->setText(ToDecimalText(favorite->centerX));
+    ui.centerY->setText(ToDecimalText(favorite->centerY));
     ui.zoom->setValue(favorite->log2Zoom);
     UpdateZoomLabel(favorite->log2Zoom);
     ui.autoIterations->setChecked(favorite->maxIterations == QMandelbrotWidget::auto_iterations);
     UpdateIterationFields();
-    ui.juliaReal->setText(JuliaComponentToString(favorite->juliaConstant.real()));
-    ui.juliaImag->setText(JuliaComponentToString(favorite->juliaConstant.imag()));
+    ui.juliaReal->setText(ToDecimalText(favorite->juliaConstant.real));
+    ui.juliaImag->setText(ToDecimalText(favorite->juliaConstant.imag));
     UpdateJuliaFields();
 }
 
@@ -208,6 +197,7 @@ void QFavoritesDialog::UpdateJuliaFields()
     const Favorite* favorite = CurrentFavorite();
     const bool isJulia = favorite && favorite->setType == QMandelbrotWidget::stJulia;
     ui.labelJulia->setEnabled(isJulia);
+    ui.labelJuliaImag->setEnabled(isJulia);
     ui.juliaReal->setEnabled(isJulia);
     ui.juliaImag->setEnabled(isJulia);
 }
@@ -382,10 +372,10 @@ void QFavoritesDialog::OnJuliaConstantEdited()
         return;
     }
 
-    if (ui.juliaReal->hasAcceptableInput()) {
-        favorite->juliaConstant.real(ui.juliaReal->text().toDouble());
+    if (const std::optional<fp128_t> real = ParseJuliaComponent(ui.juliaReal->text())) {
+        favorite->juliaConstant.real = *real;
     }
-    if (ui.juliaImag->hasAcceptableInput()) {
-        favorite->juliaConstant.imag(ui.juliaImag->text().toDouble());
+    if (const std::optional<fp128_t> imag = ParseJuliaComponent(ui.juliaImag->text())) {
+        favorite->juliaConstant.imag = *imag;
     }
 }

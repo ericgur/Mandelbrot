@@ -159,6 +159,7 @@
     <ClInclude Include="Benchmark.h" />
     <ClInclude Include="ComplexSelectDlg.h" />
     <ClInclude Include="Favorites.h" />
+    <ClInclude Include="Fp128Text.h" />
     <ClInclude Include="fp128\fixed_point128.h" />
     <ClInclude Include="fp128\float128.h" />
     <ClInclude Include="fp128\fp128_decimal.h" />
@@ -181,6 +182,7 @@
     </ClCompile>
     <ClCompile Include="Benchmark.cpp" />
     <ClCompile Include="Favorites.cpp" />
+    <ClCompile Include="Fp128Text.cpp" />
     <ClCompile Include="main.cpp" />
     <ClCompile Include="QFavoritesDialog.cpp" />
     <ClCompile Include="QJuliaSetOptions.cpp" />

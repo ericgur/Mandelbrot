@@ -3,13 +3,14 @@
  * @brief Implementation of favorite locations and their QSettings storage.
  *
  * Favorites are written as a QSettings array. Every value is stored in a readable form so
- * the settings can be inspected by hand: coordinates are decimal text (a double would lose
- * the deep-zoom digits), and the set type and the Auto iteration limit are words.
+ * the settings can be inspected by hand: coordinates and the Julia constant are decimal text
+ * (a double would lose the deep-zoom digits), and the set type and the Auto iteration limit
+ * are words.
  */
 
 #include "pch.h"
 #include <algorithm>
-#include <string>
+#include <cmath>
 #include <QSettings>
 #include "Favorites.h"
 
@@ -26,80 +27,85 @@ constexpr auto centerYKey = "centerY";               ///< Favorite::centerY, as 
 constexpr auto log2ZoomKey = "log2Zoom";             ///< Favorite::log2Zoom.
 constexpr auto maxIterationsKey = "maxIterations";   ///< Favorite::maxIterations, or autoName for Auto.
 constexpr auto setTypeKey = "setType";               ///< Favorite::setType, as mandelbrotName or juliaName.
-constexpr auto juliaRealKey = "juliaReal";           ///< Real part of Favorite::juliaConstant; Julia favorites only.
-constexpr auto juliaImagKey = "juliaImag";           ///< Imaginary part of Favorite::juliaConstant; Julia favorites only.
+constexpr auto juliaRealKey = "juliaReal";           ///< Real part of Favorite::juliaConstant, as decimal text; Julia favorites only.
+constexpr auto juliaImagKey = "juliaImag";           ///< Imaginary part of Favorite::juliaConstant, as decimal text; Julia favorites only.
 
 constexpr auto mandelbrotName = "mandelbrot"_L1;  ///< Stored value of setTypeKey for QMandelbrotWidget::stMandelbrot.
 constexpr auto juliaName = "julia"_L1;            ///< Stored value of setTypeKey for QMandelbrotWidget::stJulia.
 constexpr auto autoName = "auto"_L1;              ///< Stored value of maxIterationsKey for QMandelbrotWidget::auto_iterations.
 
 /**
- * @brief Round a decimal number's text to fewer fraction digits, half up.
- * @param text Decimal number with a fraction, as fp128 formats it, for example "-0.25".
- * @param end Index of the first digit to drop; it must lie past the decimal point.
- * @return The text up to @p end, rounded, for example "-0.3" for "-0.25" and an @p end of 4.
+ * @brief Read a Julia constant part from the settings.
+ *
+ * Favorites saved before the constant had fp128 precision hold a double, which QSettings may
+ * have written in exponent form, such as "1e-05"; that form is read through a double.
+ *
+ * @param value Stored value.
+ * @return The value, or no value if it is missing, malformed or outside [-2, 2].
  */
-[[nodiscard]] std::string RoundDecimal(const std::string& text, size_t end)
+[[nodiscard]] std::optional<fp128_t> ReadJuliaComponent(const QVariant& value)
 {
-    std::string result = text.substr(0, end);
-    if (text[end] < '5') {
-        return result;
+    if (const std::optional<fp128_t> parsed = ParseJuliaComponent(value.toString())) {
+        return parsed;
     }
 
-    // carry through the kept digits, stepping over the decimal point
-    for (size_t i = result.size(); i-- > 0;) {
-        char& c = result[i];
-        if (c == '-') {
-            break;
-        }
-        if (c == '.') {
-            continue;
-        }
-        if (c != '9') {
-            ++c;
-            return result;
-        }
-        c = '0';
+    bool isNumber = false;
+    const double legacy = value.toDouble(&isNumber);
+    if (!isNumber || std::abs(legacy) > 2.0) {
+        return std::nullopt;
     }
-    // every kept digit was a 9, so the carry adds a digit: "9.96" -> "10.0"
-    result.insert(result.starts_with('-') ? 1 : 0, 1, '1');
 
-    return result;
+    return fp128_t(legacy);
 }
 
 /**
  * @brief Build the favorites a first run starts with: ten famous Mandelbrot and Julia locations.
  *
- * Every location was picked by rendering it with the Auto iteration limit, and they keep
- * Auto: fixed limits of 512 and up darken several of them with this palette, and Auto keeps
- * scaling when the user zooms on from there. Julia constants keep to the 10 decimals that the
- * favorites editor accepts.
+ * Each has a fixed iteration limit: the lowest Iterations menu preset that leaves under 0.3%
+ * of the view unresolved, meaning drawn black although the point escapes after more
+ * iterations. Beyond that, more iterations barely change the image and only cost render time.
+ * Triple Spiral Valley gets the slider's maximum of 2500 instead: points next to the parabolic
+ * root of the 1/3 bulb escape so slowly that 1.6% of the view is still unresolved there.
+ *
+ * The Julia constants have fp128 precision. The rabbit and the Siegel disk use their exact
+ * values: the period 3 center, and the parameter whose fixed point rotates by the golden mean.
  *
  * @return The default favorites in menu order.
  */
 [[nodiscard]] QVector<Favorite> DefaultFavorites()
 {
     constexpr auto julia = QMandelbrotWidget::stJulia;
-    constexpr auto autoLimit = QMandelbrotWidget::auto_iterations;
 
     return {
-        {.description = "Seahorse Valley", .centerX = fp128_t("-0.745428"), .centerY = fp128_t("0.113009"), .log2Zoom = 10, .maxIterations = autoLimit},
-        {.description = "Elephant Valley", .centerX = fp128_t("0.3"), .centerY = fp128_t("0.02"), .log2Zoom = 7, .maxIterations = autoLimit},
-        {.description = "Triple Spiral Valley", .centerX = fp128_t("-0.0888"), .centerY = fp128_t("0.6556"), .log2Zoom = 10, .maxIterations = autoLimit},
+        {.description = "Seahorse Valley", .centerX = fp128_t("-0.745428"), .centerY = fp128_t("0.113009"), .log2Zoom = 10, .maxIterations = 1024},
+        {.description = "Elephant Valley", .centerX = fp128_t("0.3"), .centerY = fp128_t("0.02"), .log2Zoom = 7, .maxIterations = 2048},
+        {.description = "Triple Spiral Valley",
+         .centerX = fp128_t("-0.0888"),
+         .centerY = fp128_t("0.6556"),
+         .log2Zoom = 10,
+         .maxIterations = QMandelbrotWidget::max_iterations},
         // centered on the period 3 nucleus, the largest copy of the set on the real axis
-        {.description = "Mini Mandelbrot (Period 3)", .centerX = fp128_t("-1.7548776662466927"), .log2Zoom = 6, .maxIterations = autoLimit},
+        {.description = "Mini Mandelbrot (Period 3)", .centerX = fp128_t("-1.7548776662466927"), .log2Zoom = 6, .maxIterations = 384},
         // where the period doubling bulbs along the real axis accumulate
-        {.description = "Feigenbaum Point", .centerX = fp128_t("-1.4011551890920506"), .log2Zoom = 7, .maxIterations = autoLimit},
+        {.description = "Feigenbaum Point", .centerX = fp128_t("-1.4011551890920506"), .log2Zoom = 7, .maxIterations = 1536},
         // the target of the zoom sequence in Wikipedia's Mandelbrot set article
         {.description = "Wikipedia Zoom Sequence",
          .centerX = fp128_t("-0.743643887037158704752191506114774"),
          .centerY = fp128_t("0.131825904205311970493132056385139"),
          .log2Zoom = 16,
-         .maxIterations = autoLimit},
-        {.description = "Douady Rabbit Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.123, 0.745}},
-        {.description = "Basilica Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-1.0, 0.0}},
-        {.description = "Siegel Disk Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.3905408702, -0.5867879073}},
-        {.description = "Spiral Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.8, 0.156}},
+         .maxIterations = 768},
+        {.description = "Douady Rabbit Julia Set",
+         .log2Zoom = 1,
+         .maxIterations = 128,
+         .setType = julia,
+         .juliaConstant = {fp128_t("-0.122561166876653619975245551820735654"), fp128_t("0.744861766619744236593170428604392367")}},
+        {.description = "Basilica Julia Set", .log2Zoom = 1, .maxIterations = 128, .setType = julia, .juliaConstant = {fp128_t("-1"), fp128_t("0")}},
+        {.description = "Siegel Disk Julia Set",
+         .log2Zoom = 1,
+         .maxIterations = 128,
+         .setType = julia,
+         .juliaConstant = {fp128_t("-0.390540870218400050669762600713798486"), fp128_t("-0.58678790734696875119671464305571584")}},
+        {.description = "Spiral Julia Set", .log2Zoom = 1, .maxIterations = 1024, .setType = julia, .juliaConstant = {fp128_t("-0.8"), fp128_t("0.156")}},
     };
 }
 
@@ -112,44 +118,6 @@ QString Favorite::displayName() const
     }
 
     return description;
-}
-
-const QRegularExpression& CoordinateRegularExpression()
-{
-    static const QRegularExpression pattern(uR"([+-]?(\d{1,2}(\.\d*)?|\.\d+))"_s);
-    return pattern;
-}
-
-std::optional<fp128_t> ParseCoordinate(const QString& text)
-{
-    static const QRegularExpression anchored(QRegularExpression::anchoredPattern(CoordinateRegularExpression().pattern()));
-    if (!anchored.match(text).hasMatch()) {
-        return std::nullopt;
-    }
-
-    return fp128_t(text.toStdString());
-}
-
-QString CoordinateToString(const fp128_t& value)
-{
-    // fp128 prints every meaningful digit, so a value typed as "-0.2" would come back as
-    // "-0.200000000000000000000000000000000001", 0.2 having no exact binary form. The fewest
-    // digits that parse back to the same value keep such numbers as they were typed, and
-    // checking each candidate with the parser also makes the round trip exact where possible.
-    const std::string full = static_cast<std::string>(value);
-    const size_t point = full.find('.');
-    if (point == std::string::npos) {
-        return QString::fromStdString(full);
-    }
-
-    for (size_t end = point + 2; end < full.size(); ++end) {
-        const std::string candidate = RoundDecimal(full, end);
-        if (fp128_t(candidate) == value) {
-            return QString::fromStdString(candidate);
-        }
-    }
-
-    return QString::fromStdString(full);
 }
 
 QVector<Favorite> LoadFavorites()
@@ -172,7 +140,13 @@ QVector<Favorite> LoadFavorites()
         bool zoomValid = false;
         const int log2Zoom = settings.value(log2ZoomKey).toInt(&zoomValid);
         const QString setType = settings.value(setTypeKey).toString();
-        if (!centerX || !centerY || !zoomValid || (setType != mandelbrotName && setType != juliaName)) {
+        // only Julia favorites store a constant
+        std::optional<fp128_t> juliaReal = fp128_t {}, juliaImag = fp128_t {};
+        if (setType == juliaName) {
+            juliaReal = ReadJuliaComponent(settings.value(juliaRealKey));
+            juliaImag = ReadJuliaComponent(settings.value(juliaImagKey));
+        }
+        if (!centerX || !centerY || !zoomValid || !juliaReal || !juliaImag || (setType != mandelbrotName && setType != juliaName)) {
             qWarning("Skipping favorite %d: its stored location is incomplete or malformed", i + 1);
             continue;
         }
@@ -191,8 +165,7 @@ QVector<Favorite> LoadFavorites()
         }
         favorite.setType = (setType == juliaName) ? QMandelbrotWidget::stJulia : QMandelbrotWidget::stMandelbrot;
         if (favorite.setType == QMandelbrotWidget::stJulia) {
-            favorite.juliaConstant = {settings.value(juliaRealKey, favorite.juliaConstant.real()).toDouble(),
-                                      settings.value(juliaImagKey, favorite.juliaConstant.imag()).toDouble()};
+            favorite.juliaConstant = {*juliaReal, *juliaImag};
         }
         favorites.append(favorite);
     }
@@ -214,8 +187,8 @@ bool SaveFavorites(const QVector<Favorite>& favorites)
 
         settings.setArrayIndex(static_cast<int>(i));
         settings.setValue(descriptionKey, favorite.description);
-        settings.setValue(centerXKey, CoordinateToString(favorite.centerX));
-        settings.setValue(centerYKey, CoordinateToString(favorite.centerY));
+        settings.setValue(centerXKey, ToDecimalText(favorite.centerX));
+        settings.setValue(centerYKey, ToDecimalText(favorite.centerY));
         settings.setValue(log2ZoomKey, favorite.log2Zoom);
         if (favorite.maxIterations == QMandelbrotWidget::auto_iterations) {
             settings.setValue(maxIterationsKey, autoName);
@@ -224,8 +197,8 @@ bool SaveFavorites(const QVector<Favorite>& favorites)
         }
         settings.setValue(setTypeKey, isJulia ? juliaName : mandelbrotName);
         if (isJulia) {
-            settings.setValue(juliaRealKey, favorite.juliaConstant.real());
-            settings.setValue(juliaImagKey, favorite.juliaConstant.imag());
+            settings.setValue(juliaRealKey, ToDecimalText(favorite.juliaConstant.real));
+            settings.setValue(juliaImagKey, ToDecimalText(favorite.juliaConstant.imag));
         }
     }
     settings.endArray();

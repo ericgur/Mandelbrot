@@ -10,7 +10,6 @@
 
 #pragma once
 
-#include <complex>
 #include <QWidget>
 #include <QChronoTimer>
 
@@ -19,6 +18,25 @@
 
 /// @brief 128-bit fixed-point type with 8 integer bits and 120 fractional bits.
 typedef fp128::fixed_point128<8> fp128_t;
+
+/**
+ * @struct Complex128
+ * @brief A complex number with fp128 parts, such as the Julia constant.
+ *
+ * std::complex is only specified for the built-in floating point types, so the parts are
+ * two plain fp128_t members.
+ */
+struct Complex128 {
+    fp128_t real {};  ///< Real part.
+    fp128_t imag {};  ///< Imaginary part.
+
+    /**
+     * @brief Compare both parts exactly.
+     * @param rhs Value to compare with.
+     * @return True if both parts are equal.
+     */
+    bool operator==(const Complex128& rhs) const = default;
+};
 
 /**
  * @struct FrameStats
@@ -59,8 +77,6 @@ public:
     static inline constexpr int64_t min_iterations = 128;   ///< Lower bound for iteration count.
     static inline constexpr double logMaxZoom = 113.0;      ///< Log2 of maximum zoom (128-bit fixed-point limit).
     static inline constexpr double logMinZoom = 0.0;        ///< Log2 of minimum zoom (x1).
-    /// Julia constant used until another one is set.
-    static inline constexpr std::complex<double> defaultJuliaConstant {0.285, 0.01};
     /// setMaximumIterations() value that turns on Auto, which scales the iteration limit with the zoom.
     static inline constexpr int64_t auto_iterations = 0;
     /// Lowest fixed iteration limit the UI offers; max_iterations is the highest.
@@ -136,7 +152,13 @@ public:
      * @brief Get the current Julia set constant.
      * @return The complex constant C used for Julia set rendering.
      */
-    std::complex<double> juliaConstant() const { return _juliaConstant; }
+    [[nodiscard]] Complex128 juliaConstant() const { return _juliaConstant; }
+
+    /**
+     * @brief Get the Julia constant used until another one is set.
+     * @return 0.285 + 0.01i, exact to fp128 precision.
+     */
+    [[nodiscard]] static Complex128 defaultJuliaConstant();
 
     /**
      * @brief Get the real part of the view center.
@@ -190,10 +212,21 @@ public:
      */
     bool openMp() const { return _useOpenMP; }
 
+    /**
+     * @brief Mark the fractal for recomputation on the next frame, and the color table too if asked.
+     *
+     * Passing false leaves the color table as it is; it never marks a stale table valid. A table
+     * left stale by an iteration limit or palette change must still be rebuilt, or the frame
+     * reads it past its end with the new limit.
+     *
+     * @param invalidateColorTable True to rebuild the color table as well.
+     */
     virtual void invalidate(bool invalidateColorTable = true)
     {
         setFractalDataValid(false);
-        setColorTableValid(!invalidateColorTable);
+        if (invalidateColorTable) {
+            setColorTableValid(false);
+        }
         update();
     }
 
@@ -209,7 +242,7 @@ public slots:
      * @brief Set the Julia set complex constant and trigger a re-render.
      * @param c The new complex constant value.
      */
-    void setJuliaConstant(const std::complex<double>& c);
+    void setJuliaConstant(const Complex128& c);
 
     /** @brief Reset the view to the default bounds and zoom level. */
     void resetView();
@@ -344,8 +377,8 @@ private:
     bool _animate = false;                   ///< True if palette animation is running.
 
     // Set type and Julia constants
-    set_type_t _setType = stMandelbrot;                          ///< Active fractal set type.
-    std::complex<double> _juliaConstant = defaultJuliaConstant;  ///< Julia set complex constant.
+    set_type_t _setType = stMandelbrot;                  ///< Active fractal set type.
+    Complex128 _juliaConstant = defaultJuliaConstant();  ///< Julia set complex constant.
 
     // Timer for animation
     QChronoTimer _timer;  ///< Timer driving palette animation ticks.

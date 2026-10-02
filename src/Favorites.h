@@ -11,11 +11,9 @@
 
 #pragma once
 
-#include <complex>
-#include <optional>
-#include <QRegularExpression>
 #include <QString>
 #include <QVector>
+#include "Fp128Text.h"
 #include "QMandelbrotWidget.h"
 
 /**
@@ -31,7 +29,8 @@
  * scaling if the user zooms on from there.
  *
  * The Julia constant only matters for Julia favorites. It is stored for those alone, and
- * loading a Mandelbrot favorite leaves the current constant alone.
+ * loading a Mandelbrot favorite leaves the current constant alone. Like the center, it keeps
+ * full fp128 precision.
  */
 struct Favorite {
     QString description;                                         ///< Name shown in the Favorites menu.
@@ -39,8 +38,8 @@ struct Favorite {
     fp128_t centerY {};                                          ///< Imaginary part of the view center.
     int32_t log2Zoom = 0;                                        ///< Zoom as a power of 2, in [logMinZoom, logMaxZoom].
     int64_t maxIterations = QMandelbrotWidget::auto_iterations;  ///< Iteration limit in [min_fixed_iterations, max_iterations], or auto_iterations.
-    QMandelbrotWidget::set_type_t setType = QMandelbrotWidget::stMandelbrot;       ///< Fractal the location belongs to.
-    std::complex<double> juliaConstant = QMandelbrotWidget::defaultJuliaConstant;  ///< Julia constant C; unused by Mandelbrot favorites.
+    QMandelbrotWidget::set_type_t setType = QMandelbrotWidget::stMandelbrot;  ///< Fractal the location belongs to.
+    Complex128 juliaConstant = QMandelbrotWidget::defaultJuliaConstant();     ///< Julia constant C; unused by Mandelbrot favorites.
 
     /**
      * @brief Get the name to show for this favorite.
@@ -48,41 +47,6 @@ struct Favorite {
      */
     [[nodiscard]] QString displayName() const;
 };
-
-/**
- * @brief Get the regular expression a center coordinate's text must match.
- *
- * Accepts a plain decimal number with an optional sign and at most two integer digits, for
- * example "-0.7436438870371587047521915034129". Exponents are not accepted. The two-digit
- * limit keeps a coordinate, plus the view's half-width around it, well inside the
- * [-128, 128) range of fp128_t.
- *
- * The pattern is not anchored, which suits QRegularExpressionValidator: it anchors the
- * pattern itself and reports a partial match, such as a lone "-", as Intermediate.
- *
- * @return The coordinate pattern.
- */
-[[nodiscard]] const QRegularExpression& CoordinateRegularExpression();
-
-/**
- * @brief Parse a center coordinate typed or stored as decimal text.
- * @param text Text that must fully match CoordinateRegularExpression().
- * @return The value, accurate to about 36 decimal digits, or no value if the text doesn't match.
- */
-[[nodiscard]] std::optional<fp128_t> ParseCoordinate(const QString& text);
-
-/**
- * @brief Format a center coordinate as decimal text that ParseCoordinate() reads back.
- *
- * The text is the shortest decimal that ParseCoordinate() reads back as exactly the same
- * value, so "-0.2" stays "-0.2" although 0.2 has no exact binary form. When no shorter text
- * reads back exactly, every meaningful digit is written, which reads back to within one unit
- * in the last place.
- *
- * @param value Coordinate to format.
- * @return Decimal text, for example "-0.7436438870371587047521915034129".
- */
-[[nodiscard]] QString CoordinateToString(const fp128_t& value);
 
 /**
  * @brief Read the favorites from the application settings.

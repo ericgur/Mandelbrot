@@ -63,8 +63,10 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 | `QMandelbrotWidget` | `src/QMandelbrotWidget.h/.cpp` | Core rendering engine; escape-time algo, coloring, mouse/keyboard input, image export |
 | `QtMainWindow` | `src/QtMainWindow.h/.cpp` | Main window; menu bar, status bar stats, routes actions to widget |
 | `QJuliaSetOptions` | `src/QJuliaSetOptions.h/.cpp` | Dialog for Julia set constant selection (10 presets + manual input) |
+| `Complex128` | `src/QMandelbrotWidget.h` | Complex number with `fp128_t` parts; the Julia constant everywhere (`std::complex` is only specified for built-in floats) |
 | `Favorite` | `src/Favorites.h/.cpp` | Saved location (center, log2 zoom, iteration limit, set type, Julia constant); QSettings load/save |
 | `QFavoritesDialog` | `src/QFavoritesDialog.h/.cpp` | Modal favorites editor (list + detail form; edits a copy, committed on OK) |
+| (functions) | `src/Fp128Text.h/.cpp` | `fp128_t` <-> decimal text: validation patterns, parsing, shortest round-trip formatting |
 | `fixed_point128<I>` | `src/fixed_point128.h` | Header-only 128-bit fixed-point arithmetic with full math function suite |
 
 ### `QMandelbrotWidget` Internals
@@ -73,7 +75,7 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 - **Color palettes:** Grey, Gradient, Vivid, Histogram-equalized
 - **Auto-iterations:** Scales iteration limit with `log2(zoom)` from 128 (1x) to 2500 (2¹¹³)
 - **Color animation:** `QChronoTimer` drives palette cycling
-- **Lazy redraw:** `_fractalDataValid` and `_colorTableValid` flags gate recomputation of iteration data and color LUT independently
+- **Lazy redraw:** `_fractalDataValid` and `_colorTableValid` flags gate recomputation of iteration data and color LUT independently. `invalidate(false)` leaves the color table flag alone; only the color table builders may mark it valid, or a stale table is read past its end after a limit change
 - **Mouse:** Left click = zoom 2x in; Right click = zoom 2x out; Middle = reset. Ctrl multiplies by 2x, Ctrl+Shift by 4x
 - **Keyboard:** Arrow keys pan 5%; +/- zoom 2x; F8 saves the view as a favorite (handled by `QtMainWindow`)
 - **Export:** PNG at 1920×1080, 2560×1440, or 3840×2160
@@ -81,9 +83,9 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 ### Favorites
 
 - Stored with `QSettings` (native format; organization `ericgur` set in `main.cpp`, required for QSettings to read or write at all)
-- Coordinates are stored as decimal text, never `double`, so deep-zoom locations survive; `CoordinateToString()` writes the shortest text that parses back to the same `fp128_t`
+- Coordinates and Julia constants are stored as decimal text, never `double`, so they keep fp128 precision; `ToDecimalText()` writes the shortest text that parses back to the same `fp128_t`
 - Iteration limit is stored as Auto (`auto_iterations`, written as `auto`) or a fixed value; restoring goes through `QtMainWindow::SelectIterationLimit()` so the Iterations menu and slider stay in sync
-- First run (no `favorites/size` key) returns `DefaultFavorites()`, ten famous locations; an emptied list is stored with size 0 and stays empty
+- First run (no `favorites/size` key) returns `DefaultFavorites()`, ten famous locations, each with a fixed iteration limit picked by measuring unresolved pixels; an emptied list is stored with size 0 and stays empty
 - Applying a favorite must switch set type and Julia constant **before** `setView()`, because `setSetType()` and `setJuliaConstant()` both reset the view
 
 ### `fixed_point128<I>` Library

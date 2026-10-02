@@ -5,7 +5,7 @@ A high-performance Mandelbrot and Julia set fractal renderer built with Qt6 and 
 ## Features
 
 - **Dual rendering precision** -- standard 64-bit double and custom 128-bit fixed-point arithmetic with automatic switching based on zoom depth
-- **Mandelbrot and Julia sets** -- switch between fractal types; Julia set includes 10 curated presets and custom constant input
+- **Mandelbrot and Julia sets** -- switch between fractal types; Julia set includes 10 curated presets and custom constant input at full 128-bit precision
 - **Multiple color palettes** -- Grey, Gradient, Vivid (HSV rainbow), and Histogram-equalized coloring with smooth iteration interpolation
 - **Palette animation** -- real-time color cycling with configurable timer
 - **OpenMP parallelization** -- multi-threaded scanline rendering with dynamic scheduling, toggleable at runtime
@@ -85,16 +85,16 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
   - **Iterations** -- Auto (scales with zoom level), or fixed: 128, 192, 256, 384, 512, 768, 1024, 1536, 2048
   - **Reset Zoom** -- return to initial view
   - **Animate Palette** -- toggle color cycling animation
-  - **Julia Set Options** -- open dialog to select presets or enter custom constants
+  - **Julia Set Options** -- open dialog to select presets or enter custom constants (each part in [-2, 2], up to 36 decimal places)
   - **OpenMP** -- toggle parallel rendering
 - **Favorites**
   - **Add Current View** (`F8`) -- save the current location, zoom, iteration limit, set type and Julia constant under a generated name such as `Mandelbrot 2^42 - 2026-10-01 14:32`
   - **Edit Favorites...** -- rename, change, add, duplicate, reorder or delete favorites; Go To previews an entry, OK keeps the changes and Cancel discards them
   - Below these, one entry per favorite; picking one moves the view there and restores its iteration limit (a fixed value, or Auto), with the Iterations menu and slider following
 
-Favorites are kept in the application settings (on Windows the registry key `HKCU\Software\ericgur\qMandelbrot`, on macOS `~/Library/Preferences/com.ericgur.qMandelbrot.plist`). Center coordinates are stored as decimal text so deep-zoom locations keep their full precision.
+Favorites are kept in the application settings (on Windows the registry key `HKCU\Software\ericgur\qMandelbrot`, on macOS `~/Library/Preferences/com.ericgur.qMandelbrot.plist`). Center coordinates and Julia constants are stored as decimal text so they keep their full 128-bit precision.
 
-On first run the list holds ten famous locations: Seahorse Valley, Elephant Valley, Triple Spiral Valley, the period 3 mini Mandelbrot, the Feigenbaum point and the target of Wikipedia's zoom sequence, plus the Douady rabbit, Basilica, Siegel disk and spiral (`c = -0.8 + 0.156i`) Julia sets. A list you empty stays empty. The defaults use Auto iterations.
+On first run the list holds ten famous locations: Seahorse Valley, Elephant Valley, Triple Spiral Valley, the period 3 mini Mandelbrot, the Feigenbaum point and the target of Wikipedia's zoom sequence, plus the Douady rabbit, Basilica, Siegel disk and spiral (`c = -0.8 + 0.156i`) Julia sets. A list you empty stays empty. Each default has a fixed iteration limit: the lowest Iterations preset that leaves under 0.3% of the view unresolved (2500 for Triple Spiral Valley, which never gets there). The rabbit and Siegel disk use their exact constants.
 
 ### Benchmark mode
 
@@ -139,6 +139,7 @@ output to a file works as usual.
 │   ├── QJuliaSetOptions.h/.cpp # Julia set constant configuration dialog
 │   ├── QJuliaSetOptions.ui     # Qt Designer UI for Julia options
 │   ├── Favorites.h/.cpp        # Favorite locations and their QSettings storage
+│   ├── Fp128Text.h/.cpp        # Decimal text for fp128 coordinates and Julia constants
 │   ├── QFavoritesDialog.h/.cpp # Favorites editor dialog
 │   ├── QFavoritesDialog.ui     # Qt Designer UI for the favorites editor
 │   ├── fixed_point128.h        # 128-bit fixed-point arithmetic library
@@ -183,11 +184,15 @@ The core rendering engine derived from `QWidget`. Owns the complete fractal comp
 
 ### `QJuliaSetOptions` (`QJuliaSetOptions.h` / `QJuliaSetOptions.cpp`)
 
-A dialog for configuring Julia set parameters. Provides 10 preset complex constants (e.g., `0.285 + 0.01i`, `-0.8 + 0.156i`) via a combo box, plus manual real/imaginary input validated to the range [-2, 2]. Supports auto-apply mode for real-time constant changes.
+A dialog for configuring Julia set parameters. Provides 10 preset complex constants (e.g., `0.285 + 0.01i`, `-0.8 + 0.156i`) via a combo box, plus manual real/imaginary input validated to the range [-2, 2] and taken at full fp128 precision. Supports auto-apply mode for real-time constant changes.
 
 ### `Favorites.h` / `Favorites.cpp`
 
-Defines `Favorite` (view center, zoom exponent, set type and Julia constant) and reads and writes the favorites list in `QSettings`. Coordinates are stored as the shortest decimal text that parses back to the same `fp128_t` value.
+Defines `Favorite` (view center, zoom exponent, iteration limit, set type and Julia constant) and reads and writes the favorites list in `QSettings`. Coordinates and the Julia constant are stored as the shortest decimal text that parses back to the same `fp128_t` value.
+
+### `Fp128Text.h` / `Fp128Text.cpp`
+
+Converts `fp128_t` values to and from decimal text for the line edits and the settings store: validation patterns for center coordinates and Julia constant parts, parsing, and shortest round-trip formatting.
 
 ### `QFavoritesDialog` (`QFavoritesDialog.h` / `QFavoritesDialog.cpp`)
 

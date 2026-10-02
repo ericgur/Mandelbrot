@@ -411,8 +411,8 @@ void QMandelbrotWidget::CalcIterationsDoubleImpl(float* pIterations, int64_t w, 
 {
     const float radius_sq = 2.0F * 2.0F;
     const float sqrt_32 = sqrt(32.f);
-    const double cr = IsJulia ? _juliaConstant.real() : 0.0;
-    const double ci = IsJulia ? _juliaConstant.imag() : 0.0;
+    const double cr = IsJulia ? static_cast<double>(_juliaConstant.real) : 0.0;
+    const double ci = IsJulia ? static_cast<double>(_juliaConstant.imag) : 0.0;
 
     double* xTable = new double[w];
     for (int i = 0; i < w; ++i) {
@@ -688,8 +688,8 @@ void QMandelbrotWidget::CalcIterationsFP128Impl(float* pIterations, int64_t widt
 {
     const fp128_t radius_sq = 2 * 2;
     const float sqrt_32 = sqrt(32.f);
-    const fp128_t cr = IsJulia ? _juliaConstant.real() : 0.0;
-    const fp128_t ci = IsJulia ? _juliaConstant.imag() : 0.0;
+    const fp128_t cr = IsJulia ? _juliaConstant.real : fp128_t {};
+    const fp128_t ci = IsJulia ? _juliaConstant.imag : fp128_t {};
 
     fp128_t* xTable = new fp128_t[width];
     for (int i = 0; i < width; ++i) {
@@ -1214,7 +1214,15 @@ void QMandelbrotWidget::saveImage(int width, int height)
     }
 }
 
-void QMandelbrotWidget::setJuliaConstant(const std::complex<double>& c)
+Complex128 QMandelbrotWidget::defaultJuliaConstant()
+{
+    // parsed from text, since neither part has an exact binary form and a double would pin
+    // them to the wrong digits beyond the 17th
+    static const Complex128 constant {fp128_t("0.285"), fp128_t("0.01")};
+    return constant;
+}
+
+void QMandelbrotWidget::setJuliaConstant(const Complex128& c)
 {
     SetDefaultValues();
     _juliaConstant = c;

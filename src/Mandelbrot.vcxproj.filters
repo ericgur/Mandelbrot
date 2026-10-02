@@ -41,6 +41,9 @@
     <ClInclude Include="Favorites.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Fp128Text.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="fp128\float128.h">
       <Filter>Header Files\fp128</Filter>
     </ClInclude>
@@ -83,6 +86,9 @@
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="Favorites.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="Fp128Text.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
     <ClCompile Include="QFavoritesDialog.cpp">

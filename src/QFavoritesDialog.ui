@@ -194,7 +194,7 @@
         <item row="6" column="0">
          <widget class="QLabel" name="labelJulia">
           <property name="text">
-           <string>&amp;Julia constant:</string>
+           <string>&amp;Julia real:</string>
           </property>
           <property name="buddy">
            <cstring>juliaReal</cstring>
@@ -202,28 +202,28 @@
          </widget>
         </item>
         <item row="6" column="1">
-         <layout class="QHBoxLayout" name="juliaLayout">
-          <item>
-           <widget class="QLineEdit" name="juliaReal">
-            <property name="toolTip">
-             <string>Real part of the Julia constant C</string>
-            </property>
-            <property name="placeholderText">
-             <string>Real</string>
-            </property>
-           </widget>
-          </item>
-          <item>
-           <widget class="QLineEdit" name="juliaImag">
-            <property name="toolTip">
-             <string>Imaginary part of the Julia constant C</string>
-            </property>
-            <property name="placeholderText">
-             <string>Imaginary</string>
-            </property>
-           </widget>
-          </item>
-         </layout>
+         <widget class="QLineEdit" name="juliaReal">
+          <property name="toolTip">
+           <string>Real part of the Julia constant C, in [-2, 2], up to 36 decimal places</string>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="0">
+         <widget class="QLabel" name="labelJuliaImag">
+          <property name="text">
+           <string>Julia i&amp;maginary:</string>
+          </property>
+          <property name="buddy">
+           <cstring>juliaImag</cstring>
+          </property>
+         </widget>
+        </item>
+        <item row="7" column="1">
+         <widget class="QLineEdit" name="juliaImag">
+          <property name="toolTip">
+           <string>Imaginary part of the Julia constant C, in [-2, 2], up to 36 decimal places</string>
+          </property>
+         </widget>
         </item>
        </layout>
       </widget>

@@ -9,8 +9,8 @@
 
 #pragma once
 
-#include <complex>
 #include <QDialog>
+#include "QMandelbrotWidget.h"
 #include "ui_QJuliaSetOptions.h"
 
 /**
@@ -19,7 +19,8 @@
  *
  * Offers 10 preset complex constants (classic spirals, branching structures, etc.)
  * via a combo box, plus manual real/imaginary input fields validated to the
- * range [-2, 2]. When auto-apply is enabled, changes are emitted immediately
+ * range [-2, 2]. The fields take decimal text at full fp128 precision, about 36
+ * decimal places. When auto-apply is enabled, changes are emitted immediately
  * via the juliaConstantChanged signal.
  */
 class QJuliaSetOptions : public QDialog
@@ -40,18 +41,14 @@ public:
      * @brief Populate the dialog fields with the given complex constant.
      * @param constant The complex constant to display in the real/imaginary fields.
      */
-    void setConstant(std::complex<double> constant)
-    {
-        ui.real->setText(QString::number(constant.real()));
-        ui.imag->setText(QString::number(constant.imag()));
-    }
+    void setConstant(const Complex128& constant);
 
 signals:
     /**
      * @brief Emitted when the Julia constant is changed and applied.
      * @param c The new complex constant value.
      */
-    void juliaConstantChanged(std::complex<double> c);
+    void juliaConstantChanged(const Complex128& c);
 
 private slots:
     /**
@@ -67,6 +64,12 @@ private slots:
     void valueChanged();
 
 private:
+    /**
+     * @brief Read the constant from the real/imaginary fields.
+     * @return True if both fields hold a complete number, which is then stored in c.
+     */
+    bool ReadFields();
+
     Ui_QJuliaSetOptions ui;  ///< Qt Designer generated UI.
-    std::complex<double> c;  ///< Current complex constant value.
+    Complex128 c;            ///< Current complex constant value.
 };
