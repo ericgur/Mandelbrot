@@ -158,6 +158,7 @@
   <ItemGroup>
     <ClInclude Include="Benchmark.h" />
     <ClInclude Include="ComplexSelectDlg.h" />
+    <ClInclude Include="Favorites.h" />
     <ClInclude Include="fp128\fixed_point128.h" />
     <ClInclude Include="fp128\float128.h" />
     <ClInclude Include="fp128\fp128_decimal.h" />
@@ -166,6 +167,7 @@
     <ClInclude Include="fp128\int128_t.h" />
     <ClInclude Include="fp128\uint128_t.h" />
     <ClInclude Include="pch.h" />
+    <QtMoc Include="QFavoritesDialog.h" />
     <QtMoc Include="QJuliaSetOptions.h" />
     <QtMoc Include="QMandelbrotWidget.h" />
     <QtMoc Include="QtMainWindow.h" />
@@ -178,7 +180,9 @@
       <PrecompiledHeader Condition="'$(Configuration)|$(Platform)'=='Release-Clang|x64'">NotUsing</PrecompiledHeader>
     </ClCompile>
     <ClCompile Include="Benchmark.cpp" />
+    <ClCompile Include="Favorites.cpp" />
     <ClCompile Include="main.cpp" />
+    <ClCompile Include="QFavoritesDialog.cpp" />
     <ClCompile Include="QJuliaSetOptions.cpp" />
     <ClCompile Include="QMandelbrotWidget.cpp" />
     <ClCompile Include="QtMainWindow.cpp" />
@@ -187,6 +191,7 @@
     <None Include="cpp.hint" />
   </ItemGroup>
   <ItemGroup>
+    <QtUic Include="QFavoritesDialog.ui" />
     <QtUic Include="QJuliaSetOptions.ui" />
     <QtUic Include="QtMainWindow.ui" />
   </ItemGroup>

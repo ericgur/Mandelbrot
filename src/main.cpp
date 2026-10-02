@@ -59,6 +59,10 @@ static void AttachToParentConsole()
 int main(int argc, char** argv)
 {
     QApplication app(argc, argv);
+    // QSettings needs both names to find the settings store; without the organization it can
+    // neither read nor write. Native format puts the settings in the registry at
+    // HKCU\Software\ericgur\qMandelbrot on Windows, and in com.ericgur.qMandelbrot.plist on macOS.
+    QCoreApplication::setOrganizationName(QStringLiteral("ericgur"));
     QCoreApplication::setApplicationName(QStringLiteral("qMandelbrot"));
     QCoreApplication::setApplicationVersion(QStringLiteral("1.0"));
 

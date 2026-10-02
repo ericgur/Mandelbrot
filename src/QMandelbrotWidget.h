@@ -59,6 +59,8 @@ public:
     static inline constexpr int64_t min_iterations = 128;   ///< Lower bound for iteration count.
     static inline constexpr double logMaxZoom = 113.0;      ///< Log2 of maximum zoom (128-bit fixed-point limit).
     static inline constexpr double logMinZoom = 0.0;        ///< Log2 of minimum zoom (x1).
+    /// Julia constant used until another one is set.
+    static inline constexpr std::complex<double> defaultJuliaConstant {0.285, 0.01};
 
     /** @brief Rendering precision modes. */
     enum class Precision {
@@ -131,6 +133,30 @@ public:
      * @return The complex constant C used for Julia set rendering.
      */
     std::complex<double> juliaConstant() const { return _juliaConstant; }
+
+    /**
+     * @brief Get the real part of the view center.
+     * @return Midpoint of the view's X bounds in the complex plane, at full fp128 precision.
+     */
+    [[nodiscard]] fp128_t viewCenterX() const { return (_xmin + _xmax) >> 1; }
+
+    /**
+     * @brief Get the imaginary part of the view center.
+     * @return Midpoint of the view's Y bounds in the complex plane, at full fp128 precision.
+     */
+    [[nodiscard]] fp128_t viewCenterY() const { return (_ymin + _ymax) >> 1; }
+
+    /**
+     * @brief Get the zoom level as a power of 2, in the form setView() takes it.
+     * @return Log2 of the zoom level, in [logMinZoom, logMaxZoom].
+     */
+    [[nodiscard]] int32_t log2Zoom() const;
+
+    /**
+     * @brief Get the fractal set being rendered.
+     * @return The active set type.
+     */
+    [[nodiscard]] set_type_t setType() const { return _setType; }
 
     /**
      * @brief Switch between Mandelbrot and Julia set rendering.
@@ -298,8 +324,8 @@ private:
     bool _animate = false;                   ///< True if palette animation is running.
 
     // Set type and Julia constants
-    set_type_t _setType = stMandelbrot;                 ///< Active fractal set type.
-    std::complex<double> _juliaConstant {0.285, 0.01};  ///< Julia set complex constant.
+    set_type_t _setType = stMandelbrot;                          ///< Active fractal set type.
+    std::complex<double> _juliaConstant = defaultJuliaConstant;  ///< Julia set complex constant.
 
     // Timer for animation
     QChronoTimer _timer;  ///< Timer driving palette animation ticks.

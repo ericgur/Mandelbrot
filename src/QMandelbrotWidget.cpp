@@ -1079,6 +1079,15 @@ void QMandelbrotWidget::setView(const fp128_t& centerX, const fp128_t& centerY, 
     invalidate();
 }
 
+int32_t QMandelbrotWidget::log2Zoom() const
+{
+    // Zoom only ever changes by powers of 2, so rounding just drops floating point noise. The
+    // clamp maps the below-1x zoom that zooming out with the keyboard can reach to 1x, which is
+    // as far out as setView() goes.
+    const long exponent = std::lround(std::log2(_zoomLevel));
+    return static_cast<int32_t>(std::clamp(exponent, static_cast<long>(logMinZoom), static_cast<long>(logMaxZoom)));
+}
+
 void QMandelbrotWidget::resizeEvent(QResizeEvent* event)
 {
     QWidget::resizeEvent(event);

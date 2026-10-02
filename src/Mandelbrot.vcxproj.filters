@@ -38,6 +38,9 @@
     <ClInclude Include="Benchmark.h">
       <Filter>Header Files</Filter>
     </ClInclude>
+    <ClInclude Include="Favorites.h">
+      <Filter>Header Files</Filter>
+    </ClInclude>
     <ClInclude Include="fp128\float128.h">
       <Filter>Header Files\fp128</Filter>
     </ClInclude>
@@ -79,6 +82,12 @@
     <ClCompile Include="QJuliaSetOptions.cpp">
       <Filter>Source Files</Filter>
     </ClCompile>
+    <ClCompile Include="Favorites.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
+    <ClCompile Include="QFavoritesDialog.cpp">
+      <Filter>Source Files</Filter>
+    </ClCompile>
   </ItemGroup>
   <ItemGroup>
     <None Include="cpp.hint" />
@@ -93,12 +102,18 @@
     <QtMoc Include="QJuliaSetOptions.h">
       <Filter>Header Files</Filter>
     </QtMoc>
+    <QtMoc Include="QFavoritesDialog.h">
+      <Filter>Header Files</Filter>
+    </QtMoc>
   </ItemGroup>
   <ItemGroup>
     <QtUic Include="QtMainWindow.ui">
       <Filter>Form Files</Filter>
     </QtUic>
     <QtUic Include="QJuliaSetOptions.ui">
+      <Filter>Form Files</Filter>
+    </QtUic>
+    <QtUic Include="QFavoritesDialog.ui">
       <Filter>Form Files</Filter>
     </QtUic>
   </ItemGroup>

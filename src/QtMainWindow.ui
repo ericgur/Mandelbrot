@@ -35,38 +35,7 @@ QProgressBar::chunk {
 }
 </string>
   </property>
-  <widget class="QWidget" name="centralWidget">
-   <layout class="QVBoxLayout" name="verticalLayout" stretch="8">
-    <property name="leftMargin">
-     <number>0</number>
-    </property>
-    <property name="topMargin">
-     <number>0</number>
-    </property>
-    <property name="rightMargin">
-     <number>0</number>
-    </property>
-    <property name="bottomMargin">
-     <number>0</number>
-    </property>
-    <item>
-     <widget class="QMandelbrotWidget" name="mandelbrotWidget" native="true">
-      <property name="sizePolicy">
-       <sizepolicy hsizetype="Expanding" vsizetype="Expanding">
-        <horstretch>0</horstretch>
-        <verstretch>0</verstretch>
-       </sizepolicy>
-      </property>
-      <property name="minimumSize">
-       <size>
-        <width>1000</width>
-        <height>600</height>
-       </size>
-      </property>
-     </widget>
-    </item>
-   </layout>
-  </widget>
+  <widget class="QWidget" name="centralWidget"/>
   <widget class="QMenuBar" name="menuBar">
    <property name="geometry">
     <rect>
@@ -148,9 +117,18 @@ QProgressBar::chunk {
     <addaction name="separator"/>
     <addaction name="actionOpenMP"/>
    </widget>
+   <widget class="QMenu" name="menuFavorites">
+    <property name="title">
+     <string>Favorites</string>
+    </property>
+    <addaction name="actionAddFavorite"/>
+    <addaction name="actionEditFavorites"/>
+    <addaction name="separator"/>
+   </widget>
    <addaction name="menuFile"/>
    <addaction name="menuOptions"/>
    <addaction name="menuView"/>
+   <addaction name="menuFavorites"/>
    <addaction name="menuhelp"/>
   </widget>
   <widget class="QStatusBar" name="statusBar"/>
@@ -471,16 +449,24 @@ QProgressBar::chunk {
     <string>F4</string>
    </property>
   </action>
+  <action name="actionAddFavorite">
+   <property name="text">
+    <string>Add Current View</string>
+   </property>
+   <property name="toolTip">
+    <string>Save the current location and zoom as a favorite</string>
+   </property>
+   <property name="shortcut">
+    <string>F8</string>
+   </property>
+  </action>
+  <action name="actionEditFavorites">
+   <property name="text">
+    <string>Edit Favorites...</string>
+   </property>
+  </action>
  </widget>
  <layoutdefault spacing="6" margin="11"/>
- <customwidgets>
-  <customwidget>
-   <class>QMandelbrotWidget</class>
-   <extends>QWidget</extends>
-   <header location="global">QMandelbrotWidget.h</header>
-   <container>1</container>
-  </customwidget>
- </customwidgets>
  <resources/>
  <connections>
   <connection>

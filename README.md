@@ -11,6 +11,7 @@ A high-performance Mandelbrot and Julia set fractal renderer built with Qt6 and 
 - **OpenMP parallelization** -- multi-threaded scanline rendering with dynamic scheduling, toggleable at runtime
 - **Image export** -- save rendered fractals as PNG at 1920x1080, 2560x1440, or 3840x2160
 - **Interactive navigation** -- mouse click to zoom/pan, keyboard arrow keys for panning, +/- for zoom
+- **Favorites** -- save locations at full 128-bit precision with F8, jump back to them from the Favorites menu, and edit them in a dialog
 - **Cross-platform** -- builds on Windows (MSVC, Clang/LLVM), macOS, and Linux
 
 ## Requirements
@@ -73,6 +74,7 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
 | Arrow keys | Pan view (5% of viewport per press) |
 | `+` | Zoom in 2x (centered) |
 | `-` | Zoom out 2x (centered) |
+| `F8` | Save the current view as a favorite |
 
 ### Menu options
 
@@ -85,6 +87,12 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
   - **Animate Palette** -- toggle color cycling animation
   - **Julia Set Options** -- open dialog to select presets or enter custom constants
   - **OpenMP** -- toggle parallel rendering
+- **Favorites**
+  - **Add Current View** (`F8`) -- save the current location, zoom, set type and Julia constant under a generated name such as `Mandelbrot 2^42 - 2026-10-01 14:32`
+  - **Edit Favorites...** -- rename, change, add, duplicate, reorder or delete favorites; Go To previews an entry, OK keeps the changes and Cancel discards them
+  - Below these, one entry per favorite; picking one moves the view there
+
+Favorites are kept in the application settings (on Windows the registry key `HKCU\Software\ericgur\qMandelbrot`, on macOS `~/Library/Preferences/com.ericgur.qMandelbrot.plist`). Center coordinates are stored as decimal text so deep-zoom locations keep their full precision.
 
 ### Benchmark mode
 
@@ -128,6 +136,9 @@ output to a file works as usual.
 │   ├── QMandelbrotWidget.h/.cpp# Core fractal rendering engine
 │   ├── QJuliaSetOptions.h/.cpp # Julia set constant configuration dialog
 │   ├── QJuliaSetOptions.ui     # Qt Designer UI for Julia options
+│   ├── Favorites.h/.cpp        # Favorite locations and their QSettings storage
+│   ├── QFavoritesDialog.h/.cpp # Favorites editor dialog
+│   ├── QFavoritesDialog.ui     # Qt Designer UI for the favorites editor
 │   ├── fixed_point128.h        # 128-bit fixed-point arithmetic library
 │   ├── fixed_point128_shared.h # Shared definitions for fixed-point types
 │   ├── fixed_point128.natvis   # Visual Studio debugger visualizer for fp128
@@ -171,6 +182,14 @@ The core rendering engine derived from `QWidget`. Owns the complete fractal comp
 ### `QJuliaSetOptions` (`QJuliaSetOptions.h` / `QJuliaSetOptions.cpp`)
 
 A dialog for configuring Julia set parameters. Provides 10 preset complex constants (e.g., `0.285 + 0.01i`, `-0.8 + 0.156i`) via a combo box, plus manual real/imaginary input validated to the range [-2, 2]. Supports auto-apply mode for real-time constant changes.
+
+### `Favorites.h` / `Favorites.cpp`
+
+Defines `Favorite` (view center, zoom exponent, set type and Julia constant) and reads and writes the favorites list in `QSettings`. Coordinates are stored as the shortest decimal text that parses back to the same `fp128_t` value.
+
+### `QFavoritesDialog` (`QFavoritesDialog.h` / `QFavoritesDialog.cpp`)
+
+The favorites editor: a list of favorites beside a form for the selected one. Supports New, Add Current, Duplicate, Delete, Move Up/Down and Go To; edits apply to a copy of the list that the main window keeps only when the dialog is accepted.
 
 ### `fixed_point128.h` / `fixed_point128_shared.h`
 

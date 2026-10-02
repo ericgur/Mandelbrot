@@ -11,6 +11,7 @@
 
 #include <QMainWindow>
 #include "ui_QtMainWindow.h"
+#include "Favorites.h"
 #include "QJuliaSetOptions.h"
 
 class QAction;
@@ -40,6 +41,15 @@ class QMandelbrotWidget;
  * the menu or Auto set the limit; the status bar shows the exact value.
  * Dragging renders on release only, and the slider never takes keyboard focus
  * so the arrow and +/- keys keep navigating the view.
+ *
+ * @par Favorites
+ * The Favorites menu lists saved locations; picking one moves the view there and
+ * switches the set type, and for Julia favorites the Julia constant, to match. F8
+ * (Add Current View) saves the current view at once under a generated name such
+ * as "Mandelbrot 2^42 - 2026-10-01 14:32", and Edit Favorites opens
+ * QFavoritesDialog to rename, change, reorder or delete entries. The list is
+ * written to the application settings after every change, and loaded from them
+ * at startup.
  */
 class QtMainWindow : public QMainWindow
 {
@@ -124,6 +134,43 @@ private:
      */
     void UpdateIterationsLabel(int position);
 
+    /**
+     * @brief Capture the current view as a favorite with a generated description.
+     * @return The view center, zoom, set type and Julia constant, described as e.g. "Mandelbrot 2^42 - 2026-10-01 14:32".
+     */
+    [[nodiscard]] Favorite CaptureFavorite() const;
+
+    /**
+     * @brief Move the view to a favorite.
+     *
+     * Switches the set type, and for a Julia favorite the Julia constant, before
+     * moving the view, since changing either one resets the view.
+     *
+     * @param favorite Location to show.
+     */
+    void ApplyFavorite(const Favorite& favorite);
+
+    /** @brief Save the current view as a new favorite (F8). */
+    void AddCurrentViewToFavorites();
+
+    /** @brief Open the favorites editor, and store the edited list if it is accepted. */
+    void EditFavorites();
+
+    /**
+     * @brief Write the favorites to the settings, reporting a failure in the status bar.
+     * @return True if the settings were written.
+     */
+    bool StoreFavorites();
+
+    /** @brief Recreate the favorite entries below the fixed items of the Favorites menu. */
+    void RebuildFavoritesMenu();
+
+    /**
+     * @brief Show a message in the status bar for a few seconds, then restore the render statistics.
+     * @param notice Message to show.
+     */
+    void ShowStatusNotice(const QString& notice);
+
     Ui_QtMainWindow ui;                              ///< Qt Designer generated UI.
     QMandelbrotWidget* m_centralWidget;              ///< Central fractal rendering widget.
     QVector<QAction*> iterActions;                   ///< Iteration menu action list.
@@ -132,4 +179,7 @@ private:
     QJuliaSetOptions* juliaOptionsDialog = nullptr;  ///< Julia set configuration dialog.
     QSlider* _iterSlider = nullptr;                  ///< Log-scale iteration limit slider.
     QLabel* _iterLabel = nullptr;                    ///< Approximate value at the slider position.
+    QVector<Favorite> _favorites;                    ///< Saved locations, in menu order.
+    QVector<QAction*> _favoriteActions;              ///< Favorites menu entries, rebuilt whenever the list changes.
+    QString _renderStatsMessage;                     ///< Last render statistics shown in the status bar.
 };

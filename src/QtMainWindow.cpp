@@ -12,10 +12,13 @@
 #include <QKeyEvent>
 #include <QActionGroup>
 #include <QBoxLayout>
+#include <QDateTime>
 #include <QLabel>
 #include <QSignalBlocker>
 #include <QSlider>
+#include <QTimer>
 #include "QtMainWindow.h"
+#include "QFavoritesDialog.h"
 #include "QMandelbrotWidget.h"
 
 namespace
@@ -26,6 +29,7 @@ constexpr int64_t sliderMaxIterations = QMandelbrotWidget::max_iterations;  ///<
 constexpr int sliderSteps = 1000;                                           ///< Slider positions above 0; each step is ~0.37% on the log scale.
 constexpr int sliderSingleStep = 5;                                         ///< Wheel step in positions (~1.9%); Qt scrolls wheelScrollLines() steps per notch.
 constexpr int sliderPageStep = 50;                                          ///< Page step for groove clicks and Ctrl/Shift+wheel (~20%).
+constexpr int statusNoticeMs = 3000;                                        ///< How long a status bar notice shows before the render statistics return.
 
 /**
  * @brief Map a slider position to an iteration limit on a logarithmic scale.
@@ -61,6 +65,8 @@ QtMainWindow::QtMainWindow(QWidget* parent) : QMainWindow(parent), m_centralWidg
     CreateIterationsPanel();
     juliaOptionsDialog = new QJuliaSetOptions(this);
     createActions();
+    _favorites = LoadFavorites();
+    RebuildFavoritesMenu();
 
     // initialize the widget
     onActionIterations();
@@ -138,6 +144,10 @@ void QtMainWindow::createActions()
     // Julia constant options
     connect(ui.actionJuliaSetOptions, &QAction::triggered, juliaOptionsDialog, &QJuliaSetOptions::show);
     connect(juliaOptionsDialog, &QJuliaSetOptions::juliaConstantChanged, m_centralWidget, &QMandelbrotWidget::setJuliaConstant);
+
+    // Favorites; the menu entries for the favorites themselves come from RebuildFavoritesMenu()
+    connect(ui.actionAddFavorite, &QAction::triggered, this, &QtMainWindow::AddCurrentViewToFavorites);
+    connect(ui.actionEditFavorites, &QAction::triggered, this, &QtMainWindow::EditFavorites);
 
     // OpenMP support
     connect(ui.actionOpenMP, &QAction::toggled, m_centralWidget, &QMandelbrotWidget::setOpenMp);
@@ -363,13 +373,151 @@ void QtMainWindow::onRenderDone(FrameStats stats)
         zoomStr = QString::number(stats.zoom, 'f', 2);
     }
 
-    QString msg = QString("Render time: %1 ms | Zoom: x%2 | Size: %3x%4 | Iterations: %5")
-                      .arg(stats.render_time_ms)
-                      .arg(zoomStr)
-                      .arg(stats.size.width())
-                      .arg(stats.size.height())
-                      .arg(stats.max_iterations);
-    statusBar()->showMessage(msg);
+    _renderStatsMessage = QString("Render time: %1 ms | Zoom: x%2 | Size: %3x%4 | Iterations: %5")
+                              .arg(stats.render_time_ms)
+                              .arg(zoomStr)
+                              .arg(stats.size.width())
+                              .arg(stats.size.height())
+                              .arg(stats.max_iterations);
+    statusBar()->showMessage(_renderStatsMessage);
+}
+
+/**
+ * @brief Capture the current view as a favorite.
+ *
+ * The description names the set type and zoom, and the time stamp keeps quick saves
+ * of the same spot apart.
+ *
+ * @return The current view as a favorite.
+ */
+Favorite QtMainWindow::CaptureFavorite() const
+{
+    Favorite favorite;
+    favorite.centerX = m_centralWidget->viewCenterX();
+    favorite.centerY = m_centralWidget->viewCenterY();
+    favorite.log2Zoom = m_centralWidget->log2Zoom();
+    favorite.setType = m_centralWidget->setType();
+    favorite.juliaConstant = m_centralWidget->juliaConstant();
+
+    const QString setTypeName = (favorite.setType == QMandelbrotWidget::stJulia) ? "Julia" : "Mandelbrot";
+    favorite.description = QString("%1 2^%2 - %3").arg(setTypeName).arg(favorite.log2Zoom).arg(QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
+
+    return favorite;
+}
+
+/**
+ * @brief Move the view to a favorite, switching set type and Julia constant first.
+ * @param favorite Location to show.
+ */
+void QtMainWindow::ApplyFavorite(const Favorite& favorite)
+{
+    // setChecked() emits toggled, not triggered, so onActionSetType() stays out of it
+    (favorite.setType == QMandelbrotWidget::stJulia ? ui.actionTypeJulia : ui.actionTypeMandelbrot)->setChecked(true);
+    m_centralWidget->setSetType(favorite.setType);
+
+    if (favorite.setType == QMandelbrotWidget::stJulia) {
+        // keep an open Julia options dialog in step, without it applying the constant on its own
+        {
+            const QSignalBlocker blocker(juliaOptionsDialog);
+            juliaOptionsDialog->setConstant(favorite.juliaConstant);
+        }
+        m_centralWidget->setJuliaConstant(favorite.juliaConstant);
+    }
+
+    // last, since switching the set type or the Julia constant resets the view
+    m_centralWidget->setView(favorite.centerX, favorite.centerY, favorite.log2Zoom);
+}
+
+/**
+ * @brief Save the current view as a new favorite at the end of the list.
+ */
+void QtMainWindow::AddCurrentViewToFavorites()
+{
+    const Favorite favorite = CaptureFavorite();
+    _favorites.append(favorite);
+    RebuildFavoritesMenu();
+    if (StoreFavorites()) {
+        ShowStatusNotice(QString("Added favorite \"%1\"").arg(favorite.displayName()));
+    }
+}
+
+/**
+ * @brief Open the favorites editor on a copy of the list and keep the copy if it is accepted.
+ */
+void QtMainWindow::EditFavorites()
+{
+    QFavoritesDialog dialog([this]() { return CaptureFavorite(); }, this);
+    dialog.setFavorites(_favorites);
+    connect(&dialog, &QFavoritesDialog::goToFavorite, this, &QtMainWindow::ApplyFavorite);
+    if (dialog.exec() != QDialog::Accepted) {
+        return;
+    }
+
+    _favorites = dialog.favorites();
+    RebuildFavoritesMenu();
+    StoreFavorites();
+}
+
+/**
+ * @brief Write the favorites to the settings.
+ *
+ * The in-memory list and the menu stay as they are on failure, so the favorites
+ * remain usable for this session.
+ *
+ * @return True if the settings were written.
+ */
+bool QtMainWindow::StoreFavorites()
+{
+    if (!SaveFavorites(_favorites)) {
+        ShowStatusNotice("Could not save the favorites to the application settings");
+        return false;
+    }
+
+    return true;
+}
+
+/**
+ * @brief Recreate one menu entry per favorite below the menu's fixed items.
+ *
+ * Each entry holds its own copy of the favorite, so it stays valid however the
+ * list changes until the next rebuild.
+ */
+void QtMainWindow::RebuildFavoritesMenu()
+{
+    qDeleteAll(_favoriteActions);
+    _favoriteActions.clear();
+
+    if (_favorites.isEmpty()) {
+        QAction* placeholder = ui.menuFavorites->addAction("No favorites yet (F8 adds one)");
+        placeholder->setEnabled(false);
+        _favoriteActions.append(placeholder);
+        return;
+    }
+
+    for (const Favorite& favorite : _favorites) {
+        // a lone '&' in menu text marks the mnemonic, so a literal one has to be doubled
+        QAction* act = ui.menuFavorites->addAction(QString(favorite.displayName()).replace(u'&', "&&"));
+        connect(act, &QAction::triggered, this, [this, favorite]() { ApplyFavorite(favorite); });
+        _favoriteActions.append(act);
+    }
+}
+
+/**
+ * @brief Show a status bar notice, then bring back the render statistics.
+ *
+ * The statistics are only restored if the notice is still showing, so a newer
+ * message, such as the statistics of a frame rendered meanwhile, is left alone.
+ *
+ * @param notice Message to show.
+ */
+void QtMainWindow::ShowStatusNotice(const QString& notice)
+{
+    statusBar()->showMessage(notice);
+    QTimer::singleShot(statusNoticeMs, this, [this, notice]() {
+        if (statusBar()->currentMessage() == notice) {
+            statusBar()->showMessage(_renderStatsMessage);
+        }
+    });
 }
 
 /**
