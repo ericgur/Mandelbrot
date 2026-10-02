@@ -4,7 +4,7 @@
  *
  * Favorites are written as a QSettings array. Every value is stored in a readable form so
  * the settings can be inspected by hand: coordinates are decimal text (a double would lose
- * the deep-zoom digits) and the set type is a word.
+ * the deep-zoom digits), and the set type and the Auto iteration limit are words.
  */
 
 #include "pch.h"
@@ -18,17 +18,20 @@ using namespace Qt::StringLiterals;
 namespace
 {
 
-constexpr auto favoritesKey = "favorites";      ///< Settings array holding the favorites.
-constexpr auto descriptionKey = "description";  ///< Favorite::description.
-constexpr auto centerXKey = "centerX";          ///< Favorite::centerX, as decimal text.
-constexpr auto centerYKey = "centerY";          ///< Favorite::centerY, as decimal text.
-constexpr auto log2ZoomKey = "log2Zoom";        ///< Favorite::log2Zoom.
-constexpr auto setTypeKey = "setType";          ///< Favorite::setType, as mandelbrotName or juliaName.
-constexpr auto juliaRealKey = "juliaReal";      ///< Real part of Favorite::juliaConstant; Julia favorites only.
-constexpr auto juliaImagKey = "juliaImag";      ///< Imaginary part of Favorite::juliaConstant; Julia favorites only.
+constexpr auto favoritesKey = "favorites";           ///< Settings array holding the favorites.
+constexpr auto favoritesSizeKey = "favorites/size";  ///< Length of the array; written even for an empty list.
+constexpr auto descriptionKey = "description";       ///< Favorite::description.
+constexpr auto centerXKey = "centerX";               ///< Favorite::centerX, as decimal text.
+constexpr auto centerYKey = "centerY";               ///< Favorite::centerY, as decimal text.
+constexpr auto log2ZoomKey = "log2Zoom";             ///< Favorite::log2Zoom.
+constexpr auto maxIterationsKey = "maxIterations";   ///< Favorite::maxIterations, or autoName for Auto.
+constexpr auto setTypeKey = "setType";               ///< Favorite::setType, as mandelbrotName or juliaName.
+constexpr auto juliaRealKey = "juliaReal";           ///< Real part of Favorite::juliaConstant; Julia favorites only.
+constexpr auto juliaImagKey = "juliaImag";           ///< Imaginary part of Favorite::juliaConstant; Julia favorites only.
 
 constexpr auto mandelbrotName = "mandelbrot"_L1;  ///< Stored value of setTypeKey for QMandelbrotWidget::stMandelbrot.
 constexpr auto juliaName = "julia"_L1;            ///< Stored value of setTypeKey for QMandelbrotWidget::stJulia.
+constexpr auto autoName = "auto"_L1;              ///< Stored value of maxIterationsKey for QMandelbrotWidget::auto_iterations.
 
 /**
  * @brief Round a decimal number's text to fewer fraction digits, half up.
@@ -62,6 +65,42 @@ constexpr auto juliaName = "julia"_L1;            ///< Stored value of setTypeKe
     result.insert(result.starts_with('-') ? 1 : 0, 1, '1');
 
     return result;
+}
+
+/**
+ * @brief Build the favorites a first run starts with: ten famous Mandelbrot and Julia locations.
+ *
+ * Every location was picked by rendering it with the Auto iteration limit, and they keep
+ * Auto: fixed limits of 512 and up darken several of them with this palette, and Auto keeps
+ * scaling when the user zooms on from there. Julia constants keep to the 10 decimals that the
+ * favorites editor accepts.
+ *
+ * @return The default favorites in menu order.
+ */
+[[nodiscard]] QVector<Favorite> DefaultFavorites()
+{
+    constexpr auto julia = QMandelbrotWidget::stJulia;
+    constexpr auto autoLimit = QMandelbrotWidget::auto_iterations;
+
+    return {
+        {.description = "Seahorse Valley", .centerX = fp128_t("-0.745428"), .centerY = fp128_t("0.113009"), .log2Zoom = 10, .maxIterations = autoLimit},
+        {.description = "Elephant Valley", .centerX = fp128_t("0.3"), .centerY = fp128_t("0.02"), .log2Zoom = 7, .maxIterations = autoLimit},
+        {.description = "Triple Spiral Valley", .centerX = fp128_t("-0.0888"), .centerY = fp128_t("0.6556"), .log2Zoom = 10, .maxIterations = autoLimit},
+        // centered on the period 3 nucleus, the largest copy of the set on the real axis
+        {.description = "Mini Mandelbrot (Period 3)", .centerX = fp128_t("-1.7548776662466927"), .log2Zoom = 6, .maxIterations = autoLimit},
+        // where the period doubling bulbs along the real axis accumulate
+        {.description = "Feigenbaum Point", .centerX = fp128_t("-1.4011551890920506"), .log2Zoom = 7, .maxIterations = autoLimit},
+        // the target of the zoom sequence in Wikipedia's Mandelbrot set article
+        {.description = "Wikipedia Zoom Sequence",
+         .centerX = fp128_t("-0.743643887037158704752191506114774"),
+         .centerY = fp128_t("0.131825904205311970493132056385139"),
+         .log2Zoom = 16,
+         .maxIterations = autoLimit},
+        {.description = "Douady Rabbit Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.123, 0.745}},
+        {.description = "Basilica Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-1.0, 0.0}},
+        {.description = "Siegel Disk Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.3905408702, -0.5867879073}},
+        {.description = "Spiral Julia Set", .log2Zoom = 1, .maxIterations = autoLimit, .setType = julia, .juliaConstant = {-0.8, 0.156}},
+    };
 }
 
 }  // namespace
@@ -116,6 +155,11 @@ QString CoordinateToString(const fp128_t& value)
 QVector<Favorite> LoadFavorites()
 {
     QSettings settings;
+    // a first run has no array at all, while a list the user emptied is stored with size 0
+    if (!settings.contains(favoritesSizeKey)) {
+        return DefaultFavorites();
+    }
+
     QVector<Favorite> favorites;
 
     const int count = settings.beginReadArray(favoritesKey);
@@ -138,6 +182,13 @@ QVector<Favorite> LoadFavorites()
         favorite.centerX = *centerX;
         favorite.centerY = *centerY;
         favorite.log2Zoom = std::clamp(log2Zoom, static_cast<int>(QMandelbrotWidget::logMinZoom), static_cast<int>(QMandelbrotWidget::logMaxZoom));
+        // autoName doesn't parse as a number, and neither does the missing value of a favorite
+        // saved before the limit was stored; both keep the default of Auto
+        bool iterationsValid = false;
+        const qlonglong fixedIterations = settings.value(maxIterationsKey).toLongLong(&iterationsValid);
+        if (iterationsValid && fixedIterations != QMandelbrotWidget::auto_iterations) {
+            favorite.maxIterations = std::clamp<int64_t>(fixedIterations, QMandelbrotWidget::min_fixed_iterations, QMandelbrotWidget::max_iterations);
+        }
         favorite.setType = (setType == juliaName) ? QMandelbrotWidget::stJulia : QMandelbrotWidget::stMandelbrot;
         if (favorite.setType == QMandelbrotWidget::stJulia) {
             favorite.juliaConstant = {settings.value(juliaRealKey, favorite.juliaConstant.real()).toDouble(),
@@ -166,6 +217,11 @@ bool SaveFavorites(const QVector<Favorite>& favorites)
         settings.setValue(centerXKey, CoordinateToString(favorite.centerX));
         settings.setValue(centerYKey, CoordinateToString(favorite.centerY));
         settings.setValue(log2ZoomKey, favorite.log2Zoom);
+        if (favorite.maxIterations == QMandelbrotWidget::auto_iterations) {
+            settings.setValue(maxIterationsKey, autoName);
+        } else {
+            settings.setValue(maxIterationsKey, static_cast<int>(favorite.maxIterations));
+        }
         settings.setValue(setTypeKey, isJulia ? juliaName : mandelbrotName);
         if (isJulia) {
             settings.setValue(juliaRealKey, favorite.juliaConstant.real());

@@ -61,6 +61,10 @@ public:
     static inline constexpr double logMinZoom = 0.0;        ///< Log2 of minimum zoom (x1).
     /// Julia constant used until another one is set.
     static inline constexpr std::complex<double> defaultJuliaConstant {0.285, 0.01};
+    /// setMaximumIterations() value that turns on Auto, which scales the iteration limit with the zoom.
+    static inline constexpr int64_t auto_iterations = 0;
+    /// Lowest fixed iteration limit the UI offers; max_iterations is the highest.
+    static inline constexpr int64_t min_fixed_iterations = 64;
 
     /** @brief Rendering precision modes. */
     enum class Precision {
@@ -157,6 +161,22 @@ public:
      * @return The active set type.
      */
     [[nodiscard]] set_type_t setType() const { return _setType; }
+
+    /**
+     * @brief Get the iteration limit setting, in the form setMaximumIterations() takes it.
+     * @return The fixed iteration limit, or auto_iterations while Auto is on.
+     */
+    [[nodiscard]] int64_t maximumIterations() const { return _autoIterations ? auto_iterations : _maxIter; }
+
+    /**
+     * @brief Get the iteration limit Auto picks at a zoom level.
+     *
+     * Scales linearly with log2 of the zoom, from min_iterations at 1x to max_iterations at 2^logMaxZoom.
+     *
+     * @param log2Zoom Log2 of the zoom level; values below 0 count as 0.
+     * @return The iteration limit.
+     */
+    [[nodiscard]] static int64_t autoIterationLimit(double log2Zoom);
 
     /**
      * @brief Switch between Mandelbrot and Julia set rendering.

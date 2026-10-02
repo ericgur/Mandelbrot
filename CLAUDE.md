@@ -63,7 +63,7 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 | `QMandelbrotWidget` | `src/QMandelbrotWidget.h/.cpp` | Core rendering engine; escape-time algo, coloring, mouse/keyboard input, image export |
 | `QtMainWindow` | `src/QtMainWindow.h/.cpp` | Main window; menu bar, status bar stats, routes actions to widget |
 | `QJuliaSetOptions` | `src/QJuliaSetOptions.h/.cpp` | Dialog for Julia set constant selection (10 presets + manual input) |
-| `Favorite` | `src/Favorites.h/.cpp` | Saved location (center, log2 zoom, set type, Julia constant); QSettings load/save |
+| `Favorite` | `src/Favorites.h/.cpp` | Saved location (center, log2 zoom, iteration limit, set type, Julia constant); QSettings load/save |
 | `QFavoritesDialog` | `src/QFavoritesDialog.h/.cpp` | Modal favorites editor (list + detail form; edits a copy, committed on OK) |
 | `fixed_point128<I>` | `src/fixed_point128.h` | Header-only 128-bit fixed-point arithmetic with full math function suite |
 
@@ -82,6 +82,8 @@ Smooth coloring: `mu = iter + 1 - log(log(|Z|)) / log(2)` — eliminates banding
 
 - Stored with `QSettings` (native format; organization `ericgur` set in `main.cpp`, required for QSettings to read or write at all)
 - Coordinates are stored as decimal text, never `double`, so deep-zoom locations survive; `CoordinateToString()` writes the shortest text that parses back to the same `fp128_t`
+- Iteration limit is stored as Auto (`auto_iterations`, written as `auto`) or a fixed value; restoring goes through `QtMainWindow::SelectIterationLimit()` so the Iterations menu and slider stay in sync
+- First run (no `favorites/size` key) returns `DefaultFavorites()`, ten famous locations; an emptied list is stored with size 0 and stays empty
 - Applying a favorite must switch set type and Julia constant **before** `setView()`, because `setSetType()` and `setJuliaConstant()` both reset the view
 
 ### `fixed_point128<I>` Library

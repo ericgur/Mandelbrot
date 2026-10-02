@@ -88,11 +88,13 @@ The executable is placed in the `bin/` directory as `qMandelbrot` (or `qMandelbr
   - **Julia Set Options** -- open dialog to select presets or enter custom constants
   - **OpenMP** -- toggle parallel rendering
 - **Favorites**
-  - **Add Current View** (`F8`) -- save the current location, zoom, set type and Julia constant under a generated name such as `Mandelbrot 2^42 - 2026-10-01 14:32`
+  - **Add Current View** (`F8`) -- save the current location, zoom, iteration limit, set type and Julia constant under a generated name such as `Mandelbrot 2^42 - 2026-10-01 14:32`
   - **Edit Favorites...** -- rename, change, add, duplicate, reorder or delete favorites; Go To previews an entry, OK keeps the changes and Cancel discards them
-  - Below these, one entry per favorite; picking one moves the view there
+  - Below these, one entry per favorite; picking one moves the view there and restores its iteration limit (a fixed value, or Auto), with the Iterations menu and slider following
 
 Favorites are kept in the application settings (on Windows the registry key `HKCU\Software\ericgur\qMandelbrot`, on macOS `~/Library/Preferences/com.ericgur.qMandelbrot.plist`). Center coordinates are stored as decimal text so deep-zoom locations keep their full precision.
+
+On first run the list holds ten famous locations: Seahorse Valley, Elephant Valley, Triple Spiral Valley, the period 3 mini Mandelbrot, the Feigenbaum point and the target of Wikipedia's zoom sequence, plus the Douady rabbit, Basilica, Siegel disk and spiral (`c = -0.8 + 0.156i`) Julia sets. A list you empty stays empty. The defaults use Auto iterations.
 
 ### Benchmark mode
 

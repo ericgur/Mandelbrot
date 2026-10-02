@@ -18,9 +18,14 @@
  * @brief Modal editor for the favorites list.
  *
  * The left side lists the favorites by description; the right side edits the selected one:
- * description, set type, center coordinates, zoom exponent and, for Julia favorites, the
- * Julia constant. Buttons below create an entry at the default view (New) or at the current
- * view (Add Current), duplicate, delete and reorder entries.
+ * description, set type, center coordinates, zoom exponent, iteration limit and, for Julia
+ * favorites, the Julia constant. Buttons below create an entry at the default view (New) or
+ * at the current view (Add Current), duplicate, delete and reorder entries.
+ *
+ * @par Iteration limit
+ * The limit is either fixed, in the range the main window's slider offers, or Auto. While
+ * Auto is checked the limit box is disabled and shows the limit Auto picks at the entry's
+ * zoom, following zoom edits, so unchecking Auto starts from the limit the view was drawn with.
  *
  * The dialog edits its own copy of the list. The caller reads it back with favorites() once
  * exec() returns Accepted, so Cancel discards every change.
@@ -101,6 +106,9 @@ private:
     /** @brief Enable the Julia constant fields only for a Julia favorite. */
     void UpdateJuliaFields();
 
+    /** @brief Show the selected entry's iteration limit, or the one Auto picks at its zoom, and enable the box for a fixed limit only. */
+    void UpdateIterationFields();
+
     /**
      * @brief Show the zoom multiplier that a zoom exponent stands for.
      * @param log2Zoom Zoom exponent.
@@ -145,6 +153,18 @@ private:
      * @param log2Zoom New zoom exponent.
      */
     void OnZoomChanged(int log2Zoom);
+
+    /**
+     * @brief Store an edited fixed iteration limit.
+     * @param maxIterations New iteration limit.
+     */
+    void OnMaxIterationsChanged(int maxIterations);
+
+    /**
+     * @brief Switch the selected entry between Auto and a fixed iteration limit.
+     * @param checked True for Auto; false fixes the limit at the value the box shows.
+     */
+    void OnAutoIterationsToggled(bool checked);
 
     /** @brief Store the Julia constant fields that hold a complete number. */
     void OnJuliaConstantEdited();

@@ -148,6 +148,50 @@
          </layout>
         </item>
         <item row="5" column="0">
+         <widget class="QLabel" name="labelIterations">
+          <property name="text">
+           <string>&amp;Iterations:</string>
+          </property>
+          <property name="buddy">
+           <cstring>maxIterations</cstring>
+          </property>
+         </widget>
+        </item>
+        <item row="5" column="1">
+         <layout class="QHBoxLayout" name="iterationsLayout">
+          <item>
+           <widget class="QSpinBox" name="maxIterations">
+            <property name="toolTip">
+             <string>Iteration limit; while Auto is on, the limit Auto picks at this zoom</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <widget class="QCheckBox" name="autoIterations">
+            <property name="toolTip">
+             <string>Scale the iteration limit with the zoom, like Iterations &gt; Auto</string>
+            </property>
+            <property name="text">
+             <string>&amp;Auto</string>
+            </property>
+           </widget>
+          </item>
+          <item>
+           <spacer name="iterationsSpacer">
+            <property name="orientation">
+             <enum>Qt::Orientation::Horizontal</enum>
+            </property>
+            <property name="sizeHint" stdset="0">
+             <size>
+              <width>40</width>
+              <height>20</height>
+             </size>
+            </property>
+           </spacer>
+          </item>
+         </layout>
+        </item>
+        <item row="6" column="0">
          <widget class="QLabel" name="labelJulia">
           <property name="text">
            <string>&amp;Julia constant:</string>
@@ -157,7 +201,7 @@
           </property>
          </widget>
         </item>
-        <item row="5" column="1">
+        <item row="6" column="1">
          <layout class="QHBoxLayout" name="juliaLayout">
           <item>
            <widget class="QLineEdit" name="juliaReal">
@@ -298,6 +342,8 @@
   <tabstop>centerX</tabstop>
   <tabstop>centerY</tabstop>
   <tabstop>zoom</tabstop>
+  <tabstop>maxIterations</tabstop>
+  <tabstop>autoIterations</tabstop>
   <tabstop>juliaReal</tabstop>
   <tabstop>juliaImag</tabstop>
   <tabstop>buttonNew</tabstop>

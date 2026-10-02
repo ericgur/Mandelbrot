@@ -43,6 +43,8 @@ QFavoritesDialog::QFavoritesDialog(std::function<Favorite()> currentView, QWidge
     ui.setType->addItem("Mandelbrot", QMandelbrotWidget::stMandelbrot);
     ui.setType->addItem("Julia Set", QMandelbrotWidget::stJulia);
     ui.zoom->setRange(static_cast<int>(QMandelbrotWidget::logMinZoom), static_cast<int>(QMandelbrotWidget::logMaxZoom));
+    // same range as the iterations slider in the main window
+    ui.maxIterations->setRange(static_cast<int>(QMandelbrotWidget::min_fixed_iterations), static_cast<int>(QMandelbrotWidget::max_iterations));
 
     // ParseCoordinate() and QString::toDouble() both expect a '.' decimal point, so neither
     // validator may follow a system locale that uses ','
@@ -80,6 +82,8 @@ QFavoritesDialog::QFavoritesDialog(std::function<Favorite()> currentView, QWidge
     connect(ui.juliaImag, &QLineEdit::textEdited, this, &QFavoritesDialog::OnJuliaConstantEdited);
     connect(ui.setType, &QComboBox::currentIndexChanged, this, &QFavoritesDialog::OnSetTypeChanged);
     connect(ui.zoom, &QSpinBox::valueChanged, this, &QFavoritesDialog::OnZoomChanged);
+    connect(ui.maxIterations, &QSpinBox::valueChanged, this, &QFavoritesDialog::OnMaxIterationsChanged);
+    connect(ui.autoIterations, &QCheckBox::toggled, this, &QFavoritesDialog::OnAutoIterationsToggled);
 
     ShowCurrentFavorite();
 }
@@ -157,6 +161,7 @@ void QFavoritesDialog::ShowCurrentFavorite()
 
     const QSignalBlocker setTypeBlocker(ui.setType);
     const QSignalBlocker zoomBlocker(ui.zoom);
+    const QSignalBlocker autoIterationsBlocker(ui.autoIterations);
     if (!favorite) {
         ui.description->clear();
         ui.setType->setCurrentIndex(-1);
@@ -164,6 +169,11 @@ void QFavoritesDialog::ShowCurrentFavorite()
         ui.centerY->clear();
         ui.zoom->setValue(ui.zoom->minimum());
         ui.zoomMultiplier->clear();
+        ui.autoIterations->setChecked(false);
+        {
+            const QSignalBlocker maxIterationsBlocker(ui.maxIterations);
+            ui.maxIterations->setValue(ui.maxIterations->minimum());
+        }
         ui.juliaReal->clear();
         ui.juliaImag->clear();
         return;
@@ -175,6 +185,8 @@ void QFavoritesDialog::ShowCurrentFavorite()
     ui.centerY->setText(CoordinateToString(favorite->centerY));
     ui.zoom->setValue(favorite->log2Zoom);
     UpdateZoomLabel(favorite->log2Zoom);
+    ui.autoIterations->setChecked(favorite->maxIterations == QMandelbrotWidget::auto_iterations);
+    UpdateIterationFields();
     ui.juliaReal->setText(JuliaComponentToString(favorite->juliaConstant.real()));
     ui.juliaImag->setText(JuliaComponentToString(favorite->juliaConstant.imag()));
     UpdateJuliaFields();
@@ -198,6 +210,22 @@ void QFavoritesDialog::UpdateJuliaFields()
     ui.labelJulia->setEnabled(isJulia);
     ui.juliaReal->setEnabled(isJulia);
     ui.juliaImag->setEnabled(isJulia);
+}
+
+void QFavoritesDialog::UpdateIterationFields()
+{
+    const Favorite* favorite = CurrentFavorite();
+    if (!favorite) {
+        return;
+    }
+
+    // while Auto is on, the box shows the limit Auto picks at this zoom, so turning Auto off
+    // starts from the limit the view was drawn with
+    const bool isAuto = favorite->maxIterations == QMandelbrotWidget::auto_iterations;
+    const int64_t limit = isAuto ? QMandelbrotWidget::autoIterationLimit(favorite->log2Zoom) : favorite->maxIterations;
+    const QSignalBlocker blocker(ui.maxIterations);
+    ui.maxIterations->setValue(static_cast<int>(limit));
+    ui.maxIterations->setEnabled(!isAuto);
 }
 
 void QFavoritesDialog::UpdateZoomLabel(int log2Zoom)
@@ -321,6 +349,30 @@ void QFavoritesDialog::OnZoomChanged(int log2Zoom)
 
     favorite->log2Zoom = log2Zoom;
     UpdateZoomLabel(log2Zoom);
+    // an Auto limit follows the zoom
+    UpdateIterationFields();
+}
+
+void QFavoritesDialog::OnMaxIterationsChanged(int maxIterations)
+{
+    Favorite* favorite = CurrentFavorite();
+    // the box is disabled while Auto is on, and its value then only shows what Auto picks
+    if (!favorite || favorite->maxIterations == QMandelbrotWidget::auto_iterations) {
+        return;
+    }
+
+    favorite->maxIterations = maxIterations;
+}
+
+void QFavoritesDialog::OnAutoIterationsToggled(bool checked)
+{
+    Favorite* favorite = CurrentFavorite();
+    if (!favorite) {
+        return;
+    }
+
+    favorite->maxIterations = checked ? QMandelbrotWidget::auto_iterations : ui.maxIterations->value();
+    UpdateIterationFields();
 }
 
 void QFavoritesDialog::OnJuliaConstantEdited()

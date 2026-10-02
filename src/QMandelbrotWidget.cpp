@@ -1144,9 +1144,14 @@ void QMandelbrotWidget::mousePressEvent(QMouseEvent* event)
  */
 int64_t QMandelbrotWidget::calcAutoIterationLimits()
 {
+    return autoIterationLimit(log2(_zoomLevel));
+}
+
+int64_t QMandelbrotWidget::autoIterationLimit(double log2Zoom)
+{
     // make iterations a function of zoom level.
     // map min_iterations to zoom=1 or smaller, and max_iterations to 2^113
-    double logZoom = std::max(log2(_zoomLevel), 0.0);
+    double logZoom = std::max(log2Zoom, 0.0);
 
     int64_t iters = static_cast<int64_t>(min_iterations + (logZoom / logMaxZoom) * (max_iterations - min_iterations));
     return iters;

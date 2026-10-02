@@ -24,7 +24,8 @@
 namespace
 {
 
-constexpr int64_t sliderMinIterations = 64;                                 ///< Iteration limit at the bottom of the slider.
+/// Iteration limit at the bottom of the slider.
+constexpr int64_t sliderMinIterations = QMandelbrotWidget::min_fixed_iterations;
 constexpr int64_t sliderMaxIterations = QMandelbrotWidget::max_iterations;  ///< Iteration limit at the top of the slider.
 constexpr int sliderSteps = 1000;                                           ///< Slider positions above 0; each step is ~0.37% on the log scale.
 constexpr int sliderSingleStep = 5;                                         ///< Wheel step in positions (~1.9%); Qt scrolls wheelScrollLines() steps per notch.
@@ -398,6 +399,7 @@ Favorite QtMainWindow::CaptureFavorite() const
     favorite.log2Zoom = m_centralWidget->log2Zoom();
     favorite.setType = m_centralWidget->setType();
     favorite.juliaConstant = m_centralWidget->juliaConstant();
+    favorite.maxIterations = m_centralWidget->maximumIterations();
 
     const QString setTypeName = (favorite.setType == QMandelbrotWidget::stJulia) ? "Julia" : "Mandelbrot";
     favorite.description = QString("%1 2^%2 - %3").arg(setTypeName).arg(favorite.log2Zoom).arg(QDateTime::currentDateTime().toString("yyyy-MM-dd HH:mm"));
@@ -407,6 +409,9 @@ Favorite QtMainWindow::CaptureFavorite() const
 
 /**
  * @brief Move the view to a favorite, switching set type and Julia constant first.
+ *
+ * The iteration limit goes through the Iterations menu and slider, so they show it.
+ *
  * @param favorite Location to show.
  */
 void QtMainWindow::ApplyFavorite(const Favorite& favorite)
@@ -424,8 +429,39 @@ void QtMainWindow::ApplyFavorite(const Favorite& favorite)
         m_centralWidget->setJuliaConstant(favorite.juliaConstant);
     }
 
+    SelectIterationLimit(favorite.maxIterations);
+
     // last, since switching the set type or the Julia constant resets the view
     m_centralWidget->setView(favorite.centerX, favorite.centerY, favorite.log2Zoom);
+}
+
+/**
+ * @brief Switch to an iteration limit the way picking it in the Iterations menu or slider would.
+ *
+ * A limit the menu offers, Auto included, checks that menu item. Any other limit is applied
+ * as if picked with the slider: no menu item stays checked, and the slider moves to the
+ * position nearest the limit while the widget gets the exact value.
+ *
+ * @param maxIterations Iteration limit, or QMandelbrotWidget::auto_iterations for Auto.
+ */
+void QtMainWindow::SelectIterationLimit(int64_t maxIterations)
+{
+    for (QAction* act : iterActions) {
+        // the preset items are labelled with their limit; Auto is the one that isn't a number
+        bool isNumber = false;
+        const int64_t iter = act->text().toLongLong(&isNumber);
+        if (isNumber ? iter == maxIterations : maxIterations == QMandelbrotWidget::auto_iterations) {
+            act->setChecked(true);
+            onActionIterations();
+            return;
+        }
+    }
+
+    if (QAction* act = iterGroup->checkedAction()) {
+        act->setChecked(false);
+    }
+    m_centralWidget->setMaximumIterations(maxIterations);
+    SyncIterationsSlider(maxIterations);
 }
 
 /**
