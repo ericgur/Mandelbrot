@@ -70,10 +70,10 @@
  *  fp128::version_string holds the same value as a string for code that only needs to report it.
  *  @{
  */
-#define FP128_VERSION_MAJOR 0   ///< Breaking changes to the public interface.
-#define FP128_VERSION_MINOR 11  ///< Backwards compatible additions.
-#define FP128_VERSION_PATCH 0   ///< Fixes that change neither.
-#define FP128_VERSION_BUILD 0   ///< Rebuild of an unchanged source tree.
+#define FP128_VERSION_MAJOR 1  ///< Breaking changes to the public interface.
+#define FP128_VERSION_MINOR 0  ///< Backwards compatible additions.
+#define FP128_VERSION_PATCH 0  ///< Fixes that change neither.
+#define FP128_VERSION_BUILD 0  ///< Rebuild of an unchanged source tree.
 
 /// @brief Packs a four component version into one integer, so two versions compare with `<` and `>=`.
 #define FP128_MAKE_VERSION(major, minor, patch, build) ((major) * 1000000 + (minor) * 10000 + (patch) * 100 + (build))
@@ -171,6 +171,31 @@
 #define FP128_INLINE inline
 #define FP128_FORCE_INLINE inline __attribute__((always_inline))
 #endif
+#endif
+
+/**
+ * @def FP128_SUPPRESS_DEPRECATED_BEGIN
+ * @brief Opens a region in which the use of a deprecated declaration is not reported.
+ *
+ * C++23 deprecated numeric_limits::has_denorm, numeric_limits::has_denorm_loss and the
+ * float_denorm_style enum they are typed with, and C++26 keeps all three in Annex D. The
+ * numeric_limits specializations of this library still declare the two members, because generic
+ * code may read them, and naming the enum is enough for the standard library to warn: Clang over
+ * the MSVC STL reports -Wdeprecated-declarations twice per specialization from C++23 on.
+ *
+ * The warning is silenced around those declarations only. The library's own switch,
+ * _SILENCE_CXX23_DENORM_DEPRECATION_WARNING, would have to be defined before <limits> is included
+ * and would hide the warning in the including program as well.
+ *
+ * @def FP128_SUPPRESS_DEPRECATED_END
+ * @brief Closes the region opened by FP128_SUPPRESS_DEPRECATED_BEGIN.
+ */
+#if defined(FP128_MSVC)
+#define FP128_SUPPRESS_DEPRECATED_BEGIN __pragma(warning(push)) __pragma(warning(disable : 4996))
+#define FP128_SUPPRESS_DEPRECATED_END   __pragma(warning(pop))
+#else
+#define FP128_SUPPRESS_DEPRECATED_BEGIN _Pragma("GCC diagnostic push") _Pragma("GCC diagnostic ignored \"-Wdeprecated-declarations\"")
+#define FP128_SUPPRESS_DEPRECATED_END   _Pragma("GCC diagnostic pop")
 #endif
 
 static constexpr bool FP128_CPP_STYLE_MODULO = true;  ///< Use C++ modulo semantics (false = Python-style).
