@@ -72,7 +72,7 @@
  */
 #define FP128_VERSION_MAJOR 1  ///< Breaking changes to the public interface.
 #define FP128_VERSION_MINOR 0  ///< Backwards compatible additions.
-#define FP128_VERSION_PATCH 0  ///< Fixes that change neither.
+#define FP128_VERSION_PATCH 1  ///< Fixes that change neither.
 #define FP128_VERSION_BUILD 0  ///< Rebuild of an unchanged source tree.
 
 /// @brief Packs a four component version into one integer, so two versions compare with `<` and `>=`.
@@ -184,7 +184,7 @@
  * the MSVC STL reports -Wdeprecated-declarations twice per specialization from C++23 on.
  *
  * The warning is silenced around those declarations only. The library's own switch,
- * _SILENCE_CXX23_DENORM_DEPRECATION_WARNING, would have to be defined before <limits> is included
+ * _SILENCE_CXX23_DENORM_DEPRECATION_WARNING, would have to be defined before `<limits>` is included
  * and would hide the warning in the including program as well.
  *
  * @def FP128_SUPPRESS_DEPRECATED_END
